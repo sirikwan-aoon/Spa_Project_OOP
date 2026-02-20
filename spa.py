@@ -74,21 +74,6 @@ class Spa:
         result_list.append(room)
     return result_list
 
-  def get_employee_slot(self, employee, date):
-    slot_all = employee.slot
-    slot_in_date = []
-    for slot in slot_all:
-        if slot.date == date:
-            slot_in_date.append(slot)
-    return slot_in_date
-
-  def get_room_slot(self, room, date):
-    slot_all = room.slot
-    slot_in_date = []
-    for slot in slot_all:
-        if slot.date == date:
-            slot_in_date.append(slot)
-    return slot_in_date
 
   def verify_admin(self, employee_id, input_password):
     employee = self.search_employee_by_id(employee_id)
@@ -111,17 +96,7 @@ class Spa:
   def add_add_on_list(self, add_on):
     self.__add_on_list.append(add_on)
 
-  def request_to_cancel_booking(self, booking_id, customer_id):
-    customer = self.search_customer_by_id(customer_id)
-    booking = customer.search_booking_by_id(booking_id)
-    customer.cancel_booking(booking_id)
-    for treatment in booking.treatment_list:
-      room = self.search_room_by_id(treatment.room.id)
-      therapist = self.search_employee_by_id(treatment.therapist_id)
-      time_slot_list = treatment.time_slot
-      for time in time_slot_list:
-        therapist.slot[treatment.date.day].slot_list[time][1] = 1 
-        room.slot[treatment.date.day].slot_list[time][1] += 1
+
 
   def find_intersect_free_slot(self, room_slot, therapist_slot):
     list_of_intersect_free_slot = []
@@ -146,7 +121,19 @@ class Employee:
 
   @property
   def name(self):
-    return self.__name
+    return self.__name 
+
+  def get_slot_by_date(self,date):
+    slot_in_date = []
+    for slot in self.__slot:
+        if slot.date == date:
+            slot_in_date.append(slot)
+    return slot_in_date
+
+  def add_slot_by_time(self,slot_list,time):
+      for slot_ in slot_list:
+            if slot_.slot_order == time:
+                slot_.vacancy = 1
 
 class Admin(Employee):
   def __init__(self, id, name, spa, password):
@@ -273,13 +260,7 @@ class Customer:
     booking = self.search_booking_by_id(booking_id)
     booking.treatment_list.append(TreatmentTransaction(treatment_id, date, room_id, time_slot, therapist, add_on_list))
   
-  def cancel_booking(self, booking_id):
-    booking = self.search_booking_by_id(booking_id)
-    booking.status = "CANCEL"
-    if booking.treatment_list[0].date - date.today() > timedelta(days=1):
-      self.__notice_list.append(Message(self.__id, "Refund deposit 50%", datetime.now()))
-    else:
-      self.__notice_list.append(Message(self.__id, "No refund deposit", datetime.now()))
+
 
 class Bronze(Customer):
   def __init__(self, id, name):
@@ -346,6 +327,7 @@ class TreatmentTransaction:
       self.__time_slot = time_slot
       self.__add_on_list = add_on_list
       self.__therapist = therapist
+      self.__status = ""
 
     @property  
     def treatment(self):
@@ -370,6 +352,10 @@ class TreatmentTransaction:
     @property
     def therapist(self):
       return self.__therapist
+
+    def cancle(self):
+      self.__status = "CANCLE"
+      return self.__status == "CANCLE"
 
 class Treatment:
     def __init__(self, id, name, price, duration, room_type):
@@ -431,6 +417,21 @@ class Room:
   @resource_list.setter
   def resource_list(self, value):
     self.__resource_list.append(value)
+
+
+  def get_slot_by_date(self,date):
+    slot_in_date = []
+    for slot in self.__slot:
+        if slot.date == date:
+            slot_in_date.append(slot)
+    return slot_in_date
+
+
+  def add_slot_by_time(self,slot_list,time):
+      for slot_ in slot_list:
+            if slot_.slot_order == time:
+                slot_.vacancy = 1
+
 
 class DryPrivateRoom(Room):
   def __init__(self, id, price):
@@ -644,6 +645,31 @@ class Booking:
     self.__status = "Confirmed"
     return payment.pay_deposit(deposit, **kwargs)
 
+  def cancle(self):
+    for treatment in self.__treatment_list:
+      room = treatment.room
+      therapist = treatment.therapist
+      time_slot_list = treatment.time_slot
+      room_slot = room.get_slot_by_date(treatment.date)
+      therapist_slot = therapist.get_slot_by_date(treatment.date)
+      treatment.cancle()
+      for time in time_slot_list:
+        room.add_slot_by_time(room_slot,time)
+        employee.add_slot_by_time(therapist_slot,time)
+          
+    
+    if booking.treatment_list[0].date - date.today() > timedelta(days=1):
+      self.__notice_list.append(Message(self.__id, "Refund deposit 50%", datetime.now()))
+    else:
+      self.__notice_list.append(Message(self.__id, "No refund deposit", datetime.now()))
+
+    self.__status = "CANCEL"
+    
+    return "Cancel Success✅"
+
+
+    
+
 class Therapist(Employee):
   def __init__(self, id, name, skill):
     super().__init__(id, name)
@@ -825,14 +851,14 @@ def find_free_slot(customer_id: str, therapist_id: str, date_str: str, treatment
     date_class = date(year, month, day)
     customer = spa.search_customer_by_id(customer_id)
     therapist = spa.search_employee_by_id(therapist_id)
-    therapist_slot = spa.get_employee_slot(therapist, date_class)
+    therapist_slot = therapist.get_slot_by_date(date_class)
     treatment = spa.search_treatment_by_id(treatment_id)
     room_type_str = f'ROOM-{treatment.room_type}-{room_type}'
     room_list = spa.get_room_by_room_type(room_type_str)
     free_slot_from_find_intersect_free_slot = []
     
     for room in room_list:
-       room_slot = spa.get_room_slot(room, date_class)
+       room_slot = room.get_slot_by_date(date_class)
        free_slot_from_find_intersect_free_slot.append((room, spa.find_intersect_free_slot(room_slot, therapist_slot)))
        
     print(free_slot_from_find_intersect_free_slot)
@@ -842,24 +868,8 @@ def find_free_slot(customer_id: str, therapist_id: str, date_str: str, treatment
 def cancel_booking(booking_id, customer_id):
     customer = spa.search_customer_by_id(customer_id)
     booking = customer.search_booking_by_id(booking_id)
-    customer.cancel_booking(booking_id)
-    
-    for treatment in booking.treatment_list:
-      room = spa.search_room_by_id(treatment.room.id)
-      therapist = spa.search_employee_by_id(treatment.therapist.id)
-      time_slot_list = treatment.time_slot
-      room_slot = spa.get_room_slot(room, treatment.date)
-      therapist_slot = spa.get_employee_slot(therapist, treatment.date)
-      
-      for time in time_slot_list:
-        for slot_ in room_slot:
-            if slot_.slot_order == time:
-                slot_.vacancy += 1
-        for slot_ in therapist_slot:
-            if slot_.slot_order == time:
-                slot_.vacancy = 1
-                
-    return "Cancel Success✅"
+    result = booking.cancle()
+    return result
 
 @app.post("/requestBooking/{customer_id}/{treatment_id_list}/{room_id_list}/{date_booking_str}/{time_slot_list_str}/{add_on_list_str}/{therapist_id_list}")
 def request_booking(customer_id, treatment_id_list_str, room_id_list_str, date_booking_str, time_slot_list_str, add_on_list_str, therapist_id_list_str):
@@ -908,8 +918,8 @@ def request_booking(customer_id, treatment_id_list_str, room_id_list_str, date_b
       customer.add_treatment_transaction(booking_id, treatment, date_booking, room, manage_slot[i], therapist, pre_add_on)
       
       slot = manage_slot[i]
-      room_slot = spa.get_room_slot(room, date_booking)
-      therapist_slot = spa.get_employee_slot(therapist, date_booking)
+      room_slot = room.get_slot_by_date(date_booking)
+      therapist_slot = therapist.get_slot_by_date(date_booking)
       
       for order in slot:
         for slot_ in room_slot:
@@ -943,6 +953,7 @@ def request_to_calculate_revenue_per_day(admin_id, date_):
   date_to_cal = date(year, month, day)
   admin = spa.search_employee_by_id(admin_id)
   return admin.calculate_revenue_per_day(date_to_cal)
+
 
 if __name__ == "__main__":
   uvicorn.run("spa:app", host="127.0.0.1", port=8000, log_level="info")
