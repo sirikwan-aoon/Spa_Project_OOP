@@ -4,122 +4,134 @@ import uvicorn
 from typing import Union
 
 from fastmcp import FastMCP
-
 from abc import ABC, abstractmethod
 
 mcp = FastMCP("Demo")
 app = FastAPI()
 
 # <==BOAT==>
-class Spa():
-  def __init__(self,name):
+class Spa:
+  def __init__(self, name):
     self.__name = name
-    self.__customerList = []
-    self.__employeeList = []
-    self.__roomList = []
-    self.__transactionList = []
-    self.__treatmentList = []
-    self.__resourceList = []
-    self.__addOnList = []
+    self.__customer_list = []
+    self.__employee_list = []
+    self.__room_list = []
+    self.__transaction_list = []
+    self.__treatment_list = []
+    self.__resource_list = []
+    self.__add_on_list = []
+    self.__revenue_per_day_list = []
 
   @property
-  def employeeList(self):
-    return self.__employeeList
+  def employee_list(self):
+    return self.__employee_list
 
-  def searchCustomerById(self,id):
-    for customer in self.__customerList:
+  @property
+  def treatment_list(self):
+    return self.__treatment_list
+
+  @property
+  def add_on_list(self):
+    return self.__add_on_list
+
+  @property
+  def customer_list(self):
+    return self.__customer_list
+
+  @property
+  def revenue_per_day_list(self):
+    return self.__revenue_per_day_list
+
+  def search_customer_by_id(self, id):
+    for customer in self.__customer_list:
       if customer.id == id:
         return customer
 
-  def searchEmployeeById(self,id):
-    for employee in self.__employeeList:
+  def search_employee_by_id(self, id):
+    for employee in self.__employee_list:
       if employee.id == id:
         return employee
 
-  def searchTreatmentById(self,id):
-    for treatment in self.__treatmentList:
+  def search_treatment_by_id(self, id):
+    for treatment in self.__treatment_list:
       if treatment.id == id:
         return treatment
 
-  def searchAddOnById(self,id):
-    for addOn in self.__addOnList:
-      if addOn.id == id:
-        return addOn
+  def search_add_on_by_id(self, id):
+    for add_on in self.__add_on_list:
+      if add_on.id == id:
+        return add_on
 
-  def searchRoomById(self,id):
-    for room in self.__roomList:
+  def search_room_by_id(self, id):
+    for room in self.__room_list:
       if room.id == id:
         return room
 
-  def getRoomByRoomType(self,type):
-    resultList = []
-    for room in self.__roomList:
-      # print(room.id,type)
+  def get_room_by_room_type(self, type):
+    result_list = []
+    for room in self.__room_list:
       if room.id.startswith(type):
-        resultList.append(room)
-    return resultList
+        result_list.append(room)
+    return result_list
 
-  # def requestToPay(self,admin,customer,bookId):
-  #   return admin.calculateTotal(customer,bookId)
-
-  def getEmployeeSlot(self,Employee,date):
-    slotAll = Employee.slot
-    slotInDate = []
-    for slot in slotAll:
+  def get_employee_slot(self, employee, date):
+    slot_all = employee.slot
+    slot_in_date = []
+    for slot in slot_all:
         if slot.date == date:
-            slotInDate.append(slot)
-    return slotInDate
+            slot_in_date.append(slot)
+    return slot_in_date
 
-  def getRoomSlot(self,Room,date):
-    slotAll = Room.slot
-    slotInDate = []
-    for slot in slotAll:
+  def get_room_slot(self, room, date):
+    slot_all = room.slot
+    slot_in_date = []
+    for slot in slot_all:
         if slot.date == date:
-            slotInDate.append(slot)
-    return slotInDate
+            slot_in_date.append(slot)
+    return slot_in_date
 
-  def verifyAdmin(self,employeeId,inputPassword):
-    employee = self.searchEmployeeById(employeeId)
+  def verify_admin(self, employee_id, input_password):
+    employee = self.search_employee_by_id(employee_id)
     password = employee.password
-    if password == inputPassword:
+    if password == input_password:
       employee.login = True
 
-  def addEmployee(self,Employee):
-    self.__employeeList.append(Employee)
+  def add_employee(self, employee):
+    self.__employee_list.append(employee)
 
-  def addTreatment(self,Treatment):
-    self.__treatmentList.append(Treatment)
+  def add_treatment(self, treatment):
+    self.__treatment_list.append(treatment)
 
-  def addCustomer(self,Customer):
-    self.__customerList.append(Customer)
+  def add_customer(self, customer):
+    self.__customer_list.append(customer)
 
-  def addRoom(self,Room):
-    self.__roomList.append(Room)
+  def add_room(self, room):
+    self.__room_list.append(room)
 
-  def addAddOnList(self,AddOn):
-    self.__addOnList.append(AddOn)
+  def add_add_on_list(self, add_on):
+    self.__add_on_list.append(add_on)
 
-  def requesToCancleBook(self,bookId,customerId):
-    customer = self.searchCustomerById(customerId)
-    book = customer.searchBookingById(bookId)
-    customer.cancleBook(bookId)
-    for treatment in book.treatmentList:
-      room = self.searchRoomById(treatment.room.id)
-      therapist = self.searchEmployeeById(treatment.therapistId)
-      timeSlotList = treatment.timeSlot
-      for time in timeSlotList:
-        therapist.slot[treatment.date.day].slotList[time][1] = 1 
-        room.slot[treatment.date.day].slotList[time][1] += 1
+  def request_to_cancel_booking(self, booking_id, customer_id):
+    customer = self.search_customer_by_id(customer_id)
+    booking = customer.search_booking_by_id(booking_id)
+    customer.cancel_booking(booking_id)
+    for treatment in booking.treatment_list:
+      room = self.search_room_by_id(treatment.room.id)
+      therapist = self.search_employee_by_id(treatment.therapist_id)
+      time_slot_list = treatment.time_slot
+      for time in time_slot_list:
+        therapist.slot[treatment.date.day].slot_list[time][1] = 1 
+        room.slot[treatment.date.day].slot_list[time][1] += 1
 
-  def findIntersectFreeSlot(self,roomSlot,therapistSlot):
-    listOfIntersectFreeSlot = []
-    for i in range(0,16):
-        if roomSlot[i].vacancy > 0 and therapistSlot[i].vacancy > 0:
-            listOfIntersectFreeSlot.append(roomSlot[i])
-    return listOfIntersectFreeSlot
+  def find_intersect_free_slot(self, room_slot, therapist_slot):
+    list_of_intersect_free_slot = []
+    for i in range(0, 16):
+        if room_slot[i].vacancy > 0 and therapist_slot[i].vacancy > 0:
+            list_of_intersect_free_slot.append(room_slot[i])
+    return list_of_intersect_free_slot
         
-class Employee():
-  def __init__(self,id,name):
+class Employee:
+  def __init__(self, id, name):
       self.__id = id
       self.__slot = []
       self.__name = name
@@ -132,14 +144,14 @@ class Employee():
   def slot(self):
     return self.__slot
 
-  
   @property
   def name(self):
     return self.__name
 
 class Admin(Employee):
-  def __init__(self,id,name,password):
-    super().__init__(id,name)
+  def __init__(self, id, name, spa, password):
+    super().__init__(id, name)
+    self.__spa = spa
     self.__password = password
     self.__login = False
 
@@ -151,76 +163,79 @@ class Admin(Employee):
   def login(self):
     return self.__login
 
+  @property
+  def spa(self):
+    return self.__spa
 
   @login.setter
-  def login(self,value):
+  def login(self, value):
     self.__login = value
 
   def logout(self):
     self.__login = False
 
 class RegistrationOfficer(Admin):
-  def __init__(self,id,name,Spa,password):
-    super().__init__(id,name,password)
-    self.__spa = Spa
+  def __init__(self, id, name, spa, password):
+    super().__init__(id, name, spa, password)
 
-#   def addSlot(self,Entity,vacancy):
-#     if self.login:
-#       for i in range(1,32):
-#         slot = Slot(date(2026,1,i),vacancy)
-#         Entity.slot.append(slot)
-
-  def addSlot(self,endDateMonth,Entity,vacancy):
-    year = endDateMonth.year
-    month = endDateMonth.month
-    endDate = endDateMonth.day
+  def add_slot(self, end_date_month, entity, vacancy):
+    year = end_date_month.year
+    month = end_date_month.month
+    end_date = end_date_month.day
     if self.login:
-      for i in range(1,endDate + 1):
-        for n in range(1,17):
-            slot = Slot(date(year,month,i),n,vacancy)
-            Entity.slot.append(slot)
+      for i in range(1, end_date + 1):
+        for n in range(1, 17):
+            slot = Slot(date(year, month, i), n, vacancy)
+            entity.slot.append(slot)
   
-  def addCustomer(self,Customer):
+  def add_customer(self, customer):
     if self.login:
-        self.__spa.addCustomer(Customer)
-        Customer.addNoticeList(Message(Customer.id,"OTP-005",datetime.now()))
+        self.spa.add_customer(customer)
+        notice_id = f"ENROLL_RESULT-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        customer.add_notice_list(Message(notice_id, customer, "Enroll success✅", datetime.now()))
   
-  def addEmployee(self,Employee):
-    if isinstance(Employee,RegistrationOfficer) or isinstance(Employee,Administrative) or self.login:
-      self.__spa.addEmployee(Employee)
+  def add_employee(self, employee):
+    if isinstance(employee, RegistrationOfficer) or isinstance(employee, Administrative) or self.login:
+      self.spa.add_employee(employee)
 
-  def addRoom(self,Room):
+  def add_room(self, room):
     if self.login:
-      self.__spa.addRoom(Room)
+      self.spa.add_room(room)
 
-  def addResource(self,roomId,Resource):
+  def add_resource(self, room_id, resource):
     if self.login:
-      room = self.__spa.searchRoomById(roomId)
-      room.resourceList.append(Resource)
+      room = self.spa.search_room_by_id(room_id)
+      room.resource_list.append(resource)
 
-  def addAddOn(self,AddOn):
+  def add_add_on(self, add_on):
     if self.login:
-      self.__spa.addAddOnList(AddOn)
+      self.spa.add_add_on_list(add_on)
 
-  def addTreatment(self,Treatment):
+  def add_treatment(self, treatment):
     if self.login:
-      self.__spa.addTreatment(Treatment)
+      self.spa.add_treatment(treatment)
 
-class Message():
-  def __init__(self,reciever,text,date):
-    self.__reciever = reciever
-    self.__text= text
+class Message:
+  def __init__(self, id, receiver, text, date):
+    self.__id = id
+    self.__receiver = receiver
+    self.__text = text
     self.__date = date
     self.__status = "UNREAD"
 
-class Customer():
-  def __init__(self,id,name):
+  @property
+  def text(self):
+    return self.__text
+
+class Customer:
+  def __init__(self, id, name):
     self.__id = id
     self.__name = name
-    self.__bookingList = []
-    self.__freeSlotFromFindIntersectFreeSlot = []
-    self.__noticeList = []
-    self.__missedCount = 0
+    self.__booking_list = []
+    self.__notice_list = []
+    self.__wellness_record = []
+    self.__coupons = []
+    self.__missed_count = 0
 
   @property
   def id(self):
@@ -231,87 +246,88 @@ class Customer():
     return self.__name
 
   @property
-  def bookingList(self):
-    return self.__bookingList
+  def booking_list(self):
+    return self.__booking_list
 
   @property
-  def missedCount(self):
-    return self.__missedCount
+  def missed_count(self):
+    return self.__missed_count
 
-  def addNoticeList(self,Message):
-    self.__noticeList.append(Message)
+  @property
+  def notice_list(self):
+    return self.__notice_list
 
-  def searchBookingById(self,id):
-    for  booking in self.__bookingList:
+  def add_notice_list(self, message):
+    self.__notice_list.append(message)
+
+  def search_booking_by_id(self, id):
+    for booking in self.__booking_list:
       if booking.id == id:
         return booking
 
-  def book(self,id,customerId,date):
-    book = Booking(id,self,date)
-    self.__bookingList.append(book)
+  def book(self, id, customer_id, date):
+    booking = Booking(id, self, date)
+    self.__booking_list.append(booking)
   
-  def addTreatmentTransaction(self,bookId,treatmentId,date,roomId,timeSlot,therapist,addOnList):
-    book = self.searchBookingById(bookId)
-    book.treatmentList.append(TreatmentTransaction(treatmentId,date,roomId,timeSlot,therapist,addOnList))
+  def add_treatment_transaction(self, booking_id, treatment_id, date, room_id, time_slot, therapist, add_on_list):
+    booking = self.search_booking_by_id(booking_id)
+    booking.treatment_list.append(TreatmentTransaction(treatment_id, date, room_id, time_slot, therapist, add_on_list))
   
-  # d1 = date(2026, 2, day)
-  def cancleBook(self,bookId):
-    book = self.searchBookingById(bookId)
-    book.status = "CANCLE"
-    if book.treatmentList[0].date - date.today() > timedelta(days=1):
-    #Compare Time
-      self.__noticeList.append(Message(self.__id,"Refund deposit 50%", datetime.now()))
+  def cancel_booking(self, booking_id):
+    booking = self.search_booking_by_id(booking_id)
+    booking.status = "CANCEL"
+    if booking.treatment_list[0].date - date.today() > timedelta(days=1):
+      self.__notice_list.append(Message(self.__id, "Refund deposit 50%", datetime.now()))
     else:
-      self.__noticeList.append(Message(self.__id,"No refund deposit", datetime.now()))
+      self.__notice_list.append(Message(self.__id, "No refund deposit", datetime.now()))
 
 class Bronze(Customer):
-  def __init__(self,id,name):
-    super().__init__(id,name)
+  def __init__(self, id, name):
+    super().__init__(id, name)
     self.__discount = 0
-    self.__bookingQuota = 1
+    self.__booking_quota = 1
     self.__fee = 0
   @property
   def discount(self):
     return self.__discount
 
   @property
-  def bookingQuota(self):
-    return self.__bookingQuota
+  def booking_quota(self):
+    return self.__booking_quota
 
 class Silver(Customer):
-  def __init__(self,id,name):
-      super().__init__(id,name)
+  def __init__(self, id, name):
+      super().__init__(id, name)
       self.__discount = 0.05
-      self.__bookingQuota = 2
+      self.__booking_quota = 2
       self.__fee = 1000
   @property
   def discount(self):
     return self.__discount
   
   @property
-  def bookingQuota(self):
-    return self.__bookingQuota
+  def booking_quota(self):
+    return self.__booking_quota
   
 class Gold(Customer):
-  def __init__(self,id,name):
-      super().__init__(id,name)
+  def __init__(self, id, name):
+      super().__init__(id, name)
       self.__discount = 0.1 
-      self.__bookingQuota = 3
+      self.__booking_quota = 3
       self.__fee = 1500
   @property
   def discount(self):
     return self.__discount
   
-  
   @property
-  def bookingQuota(self):
-    return self.__bookingQuota
+  def booking_quota(self):
+    return self.__booking_quota
 
 class Platinum(Customer):
-  def __init__(self,id,name):
-      super().__init__(id,name)
+  def __init__(self, id, name):
+      super().__init__(id, name)
       self.__discount = 0.2
-      self.__bookingQuota = 5
+      self.__booking_quota = 5
       self.__fee = 2500
 
   @property
@@ -319,16 +335,16 @@ class Platinum(Customer):
     return self.__discount
   
   @property
-  def bookingQuota(self):
-    return self.__bookingQuota
+  def booking_quota(self):
+    return self.__booking_quota
 
-class TreatmentTransaction():
-    def __init__(self,treatment,date,room,timeSlot,therapist,addOnList):
+class TreatmentTransaction:
+    def __init__(self, treatment, date, room, time_slot, therapist, add_on_list):
       self.__treatment = treatment
       self.__date = date
       self.__room = room
-      self.__timeSlot = timeSlot
-      self.__addOnList = addOnList
+      self.__time_slot = time_slot
+      self.__add_on_list = add_on_list
       self.__therapist = therapist
 
     @property  
@@ -344,25 +360,24 @@ class TreatmentTransaction():
       return self.__room
 
     @property  
-    def timeSlot(self):
-      return self.__timeSlot
+    def time_slot(self):
+      return self.__time_slot
 
     @property  
-    def addOnList(self):
-      return self.__addOnList
+    def add_on_list(self):
+      return self.__add_on_list
 
     @property
     def therapist(self):
       return self.__therapist
- 
 
-class Treatment():
-    def __init__(self,id,name,price,duration,roomType):
+class Treatment:
+    def __init__(self, id, name, price, duration, room_type):
       self.__name = name
       self.__id = id
       self.__price = price
       self.__duration = duration
-      self.__roomType = roomType
+      self.__room_type = room_type
 
     @property
     def id(self):
@@ -373,15 +388,15 @@ class Treatment():
       return self.__price
 
     @property
-    def roomType(self):
-      return self.__roomType
+    def room_type(self):
+      return self.__room_type
 
     @property
     def name(self):
       return self.__name
 
-class AddOn():
-  def __init__(self,id,name,price):
+class AddOn:
+  def __init__(self, id, name, price):
     self.__id = id
     self.__name = name
     self.__price = price
@@ -393,14 +408,13 @@ class AddOn():
   @property
   def price(self):
     return self.__price
-# <==BOAT==>
 
 # <==IAOON==>
 class Room:
-  def __init__(self,id):
+  def __init__(self, id):
     self.__id = id
     self.__slot = []
-    self.__resourceList = []
+    self.__resource_list = []
 
   @property
   def id(self):
@@ -411,15 +425,15 @@ class Room:
     return self.__slot
 
   @property
-  def resourceList(self):
-    return self.__resourceList
+  def resource_list(self):
+    return self.__resource_list
 
-  @resourceList.setter
-  def resourceList(self, value):
-    self.__resourceList.append(value)
+  @resource_list.setter
+  def resource_list(self, value):
+    self.__resource_list.append(value)
 
 class DryPrivateRoom(Room):
-  def __init__(self,id,price):
+  def __init__(self, id, price):
     super().__init__(id)
     self.__price = price
 
@@ -428,24 +442,24 @@ class DryPrivateRoom(Room):
     return self.__price
 
 class DrySharedRoom(Room):
-  def __init__(self,id,price):
+  def __init__(self, id, price):
     super().__init__(id)
     self.__price = price
 
 class WetPrivateRoom(Room):
-  def __init__(self,id,price):
+  def __init__(self, id, price):
     super().__init__(id)
     self.__price = price
 
 class WetSharedRoom(Room):
-  def __init__(self,id,price):
+  def __init__(self, id, price):
     super().__init__(id)
     self.__price = price
 
 class Slot:
-  def __init__(self,date,slotOrder,vacancy):
+  def __init__(self, date, slot_order, vacancy):
       self.__date = date
-      self.__slotOrder = slotOrder
+      self.__slot_order = slot_order
       self.__vacancy = vacancy
 
   @property
@@ -453,60 +467,128 @@ class Slot:
       return self.__date
 
   @property
-  def slotOrder(self):
-      return self.__slotOrder
+  def slot_order(self):
+      return self.__slot_order
 
   @property
   def vacancy(self):
       return self.__vacancy
 
   @vacancy.setter
-  def vacancy(self,value):
+  def vacancy(self, value):
       self.__vacancy = value
 
 class Administrative(Admin):
-  def __init__(self,id,name,password):
-      super().__init__(id,name,password)
-  
-  def getBookingById(self,customer,bookingId):
-      for booking in customer.bookingList:
-          if booking.id == bookingId:
-              return booking
+  def __init__(self, id, name, spa, password):
+      super().__init__(id, name, spa, password)
 
-  def calculateTotal(self,customer,bookingId):
-    booking = self.getBookingById(customer,bookingId)            
-    return booking.calculateTotal()
+  def create_resource_count_class(self):
+    treatment_list = []
+    addon_list = []
+    for treatment in self.spa.treatment_list:
+      treatment_list.append(ResourceCount(treatment))
+    for addon in self.spa.add_on_list:
+      addon_list.append(ResourceCount(addon))
+    return addon_list, treatment_list
+
+  def calculate_revenue_per_day(self, date):
+    booking_count = 0
+    total_sum = 0
+    addon_count, treatment_count = self.create_resource_count_class()
+    customer_list = self.spa.customer_list
+    for customer in customer_list:
+      booking_list = customer.booking_list
+      for booking in booking_list:
+        if booking.treatment_list[0].date == date and booking.status == "Completed":
+          booking_count += 1
+          total = booking.calculate_total()
+          total_sum += total
+          for treatment_transaction in booking.treatment_list:
+            for resource in treatment_count:
+              if resource.resource.id == treatment_transaction.treatment.id:
+                resource.count += 1
+            for resource in addon_count:
+              for addon in treatment_transaction.add_on_list:
+                if addon.id == resource.resource.id:
+                  resource.count += 1
+
+    report_revenue = RevenuePerDay(date, total_sum, booking_count, addon_count, treatment_count)
+    self.spa.revenue_per_day_list.append(report_revenue)
+
+    addon_list_text = "".join([f" {res.resource.id}: {res.count} items" for res in addon_count])
+    treatment_list_text = "".join([f" {res.resource.id}: {res.count} items" for res in treatment_count])
+
+    return f"Date : {date} Total Revenue : {total_sum} ฿ Add on usage: {addon_list_text} Treatment usage: {treatment_list_text}"
+
+class RevenuePerDay:
+  def __init__(self, date, total, booking_count, addon_count, treatment_count):
+    self.__date = date
+    self.__total = total
+    self.__booking_count = booking_count
+    self.__addon_count = addon_count
+    self.__treatment_count = treatment_count
+
+  @property
+  def booking_count(self):
+    return self.__booking_count
+
+  @booking_count.setter
+  def booking_count(self,value):
+    self.__booking_count = value
+
+  @property
+  def total(self):
+    return self.__total
+
+  @total.setter
+  def total(self,value):
+    self.__total = value
+
+class ResourceCount:
+  def __init__(self, resource):
+    self.__resource = resource
+    self.__count = 0
+
+  @property
+  def resource(self):
+    return self.__resource
+
+  @property
+  def count(self):
+    return self.__count
+
+  @count.setter
+  def count(self,value):
+    self.__count = value
 
 class Payment(ABC):
   @abstractmethod
-  def pay_deposit(self,deposit, **kwargs):
+  def pay_deposit(self, deposit, **kwargs):
     pass
 
   @abstractmethod
-  def pay_expenses(self,total, **kwargs):
+  def pay_expenses(self, total, **kwargs):
     pass
 
 class Cash(Payment):
-  def pay_deposit(self,deposit,money):
+  def pay_deposit(self, deposit, money):
     if money < deposit:
-      return f"You have to pay {deposit} ฿ for deposite⚠️"
+      return f"You have to pay {deposit} ฿ for deposit⚠️"
     else:
       return "Your booking confirmed✅"
 
-  def pay_expenses(self,total,money):
+  def pay_expenses(self, total, money):
     if money < total:
       return f"Not enough money! You have to pay {total} ฿⚠️"
     else:
       return f"Payment Success✅, Your change = {money - total} ฿"
 
-class Promptpay(Payment):
-  def pay_deposit(self,deposit,number):
-    return f"Your booking confirmed✅, {deposit} ฿ deducted from your promptpay account ({number})"
+class Card(Payment):
+  def pay_deposit(self, deposit, number):
+    return f"Your booking confirmed✅, {deposit} ฿ deducted from your card (Card id : {number})"
 
-  def pay_expenses(self,total,number):
-    return f"Payment Sucsess✅, {total} ฿ deducted from your promptpay account ({number})"
-# <==IAOON==>
-
+  def pay_expenses(self, total, number):
+    return f"Payment Success✅, {total} ฿ deducted from your card (Card id : {number})"
 
 # <==TA==>
 class Booking:
@@ -514,19 +596,19 @@ class Booking:
     self.__id = id
     self.__customer = customer
     self.__date = date
-    self.__treatmentList = []
+    self.__treatment_list = []
     self.__status = "Waiting deposit"
 
   @property
   def id(self):
     return self.__id
 
-  def getTreatmentList(self):
-    return self.__treatmentList
+  def get_treatment_list(self):
+    return self.__treatment_list
 
   @property
-  def treatmentList(self):
-    return self.__treatmentList
+  def treatment_list(self):
+    return self.__treatment_list
 
   @property
   def date(self):
@@ -537,36 +619,34 @@ class Booking:
     return self.__status
 
   @status.setter
-  def status(self,value):
+  def status(self, value):
     self.__status = value
 
-  def calculateTotal(self):
+  def calculate_total(self):
     total = 0
 
-    for treatment in self.treatmentList:
+    for treatment in self.treatment_list:
       total += treatment.treatment.price
       total += treatment.room.price
-      # print(total)
-      # print("Addon",treatment.addOnList)
-      for addon in treatment.addOnList:
-          total += addon.price
+      for add_on in treatment.add_on_list:
+          total += add_on.price
 
       discount = total * self.__customer.discount
       total -= discount
 
     return total
 
-  def pay_expenses(self,payment,total,**kwargs):
+  def pay_expenses(self, payment, total, **kwargs):
     self.__status = "Completed"
-    return payment.pay_expenses(total,**kwargs)
+    return payment.pay_expenses(total, **kwargs)
 
-  def pay_deposit(self,payment,deposit,**kwargs):
+  def pay_deposit(self, payment, deposit, **kwargs):
     self.__status = "Confirmed"
-    return payment.pay_deposit(deposit,**kwargs)
+    return payment.pay_deposit(deposit, **kwargs)
 
 class Therapist(Employee):
   def __init__(self, id, name, skill):
-    super().__init__(id,name)
+    super().__init__(id, name)
     self.__skill = skill
     self.__points = 0
 
@@ -580,324 +660,289 @@ class Resource:
 
 def init_system():
 
-  spa = Spa(name = "LADKRABANG SPA")
-
+  spa = Spa(name="LADKRABANG SPA")
 
   # Service //
-  massage1 = Treatment(id = "TM-01", name = 'TraditionalThaiMassage', price = 600, duration = 60,roomType = 'DRY')
-  massage2 = Treatment(id = "TM-02", name = 'TraditionalThaiMassage', price = 850, duration = 90,roomType = 'DRY')
-  massage3 = Treatment(id = "TM-03", name = 'TraditionalThaiMassage', price = 1100, duration = 120,roomType = 'DRY')
-  massage4 = Treatment(id = "DT-03", name = 'Deep Tissue Massage', price = 1200, duration = 60,roomType = 'DRY')
-  aroma = Treatment(id = "AT-02", name = 'Aroma Therapy', price = 1500, duration = 90,roomType = 'DRY')
-  pool = Treatment(id = "HP-04", name = 'Hydrotherapy Pool', price = 800, duration = 60,roomType = 'WET')
+  massage1 = Treatment(id="TM-01", name='Traditional Thai Massage', price=600, duration=60, room_type='DRY')
+  massage2 = Treatment(id="TM-02", name='Traditional Thai Massage', price=850, duration=90, room_type='DRY')
+  massage3 = Treatment(id="TM-03", name='Traditional Thai Massage', price=1100, duration=120, room_type='DRY')
+  massage4 = Treatment(id="DT-03", name='Deep Tissue Massage', price=1200, duration=60, room_type='DRY')
+  aroma = Treatment(id="AT-02", name='Aroma Therapy', price=1500, duration=90, room_type='DRY')
+  pool = Treatment(id="HP-04", name='Hydrotherapy Pool', price=800, duration=60, room_type='WET')
 
-  #Customer //
+  # Customer //
   c1 = Silver(id="C0001", name="Batman")
-  c10 = Silver(id="C0010", name="Aquaman")
-  c2 = Bronze(id="C0002", name="Superman")
-  c3 = Gold(id="C0003", name="Iron Man")
-  c4 = Platinum(id="C0004", name="Spider-Man")
-  c5 = Gold(id="C0005", name="Wonder Woman")
-  c6 = Silver(id="C0006", name="Black Widow")
-  c7 = Bronze(id="C0007", name="Thor")
-  c8 = Platinum(id="C0008", name="Hulk")
-  c9 = Bronze(id="C0009", name="Flash")
-
-
-  #Employee // 
+  c2 = Silver(id="C0002", name="Aquaman")
+  c3 = Bronze(id="C0003", name="Superman")
+  c4 = Gold(id="C0004", name="Iron Man")
+  c5 = Platinum(id="C0005", name="Spider-Man")
+  c6 = Gold(id="C0006", name="Wonder Woman")
+  c7 = Silver(id="C0007", name="Black Widow")
+  c8 = Bronze(id="C0008", name="Thor")
+  c9 = Platinum(id="C0009", name="Hulk")
+  c10 = Bronze(id="C0010", name="Flash")
+  
+  # Employee // 
   t1 = Therapist(id="T0001", name="John", skill="Massage")
   t2 = Therapist(id="T0002", name="Anna", skill="Massage")
   t3 = Therapist(id="T0003", name="Emma", skill="Massage")
   t4 = Therapist(id="T0004", name="Olivia", skill="Massage")
     
-    # Skill Aroma 4 คน
   t5 = Therapist(id="T0005", name="Justin", skill="Aroma")
   t6 = Therapist(id="T0006", name="Sophia", skill="Aroma")
   t7 = Therapist(id="T0007", name="Mary", skill="Aroma")
   t8 = Therapist(id="T0008", name="Matha", skill="Aroma")
     
-    # Skill Pool 3 คน
   t9 = Therapist(id="T0009", name="Ben", skill="Pool")
   t10 = Therapist(id="T0010", name="Jane", skill="Pool")
   t11 = Therapist(id="T0011", name="May", skill="Pool")
 
-  #Room //
-    # ห้องแห้งส่วนตัว 3 ห้อง
-  dr_p1 = DryPrivateRoom(id="ROOM-DRY-PV-001",price = 300)
-  dr_p2 = DryPrivateRoom(id="ROOM-DRY-PV-002", price = 300)
-  dr_p3 = DryPrivateRoom(id="ROOM-DRY-PV-003", price = 300)
-    # ห้องแห้งรวม 1 ห้อง
-  dr_s1 = DrySharedRoom(id="ROOM-DRY-SH-001", price = 0)
+  # Room //
+  dr_p1 = DryPrivateRoom(id="ROOM-DRY-PV-001", price=300)
+  dr_p2 = DryPrivateRoom(id="ROOM-DRY-PV-002", price=300)
+  dr_p3 = DryPrivateRoom(id="ROOM-DRY-PV-003", price=300)
+  dr_s1 = DrySharedRoom(id="ROOM-DRY-SH-001", price=0)
     
-    # ห้องเปียกส่วนตัว 3 ห้อง
-  wr_p1 = WetPrivateRoom(id="ROOM-WET-PV-001", price = 300)
-  wr_p2 = WetPrivateRoom(id="ROOM-WET-PV-002", price = 300)
-  wr_p3 = WetPrivateRoom(id="ROOM-WET-PV-003", price = 300)
-    # ห้องเปียกรวม 1 ห้อง
-  wr_s1 = WetSharedRoom(id="ROOM-WET-SH-001", price = 0)
+  wr_p1 = WetPrivateRoom(id="ROOM-WET-PV-001", price=300)
+  wr_p2 = WetPrivateRoom(id="ROOM-WET-PV-002", price=300)
+  wr_p3 = WetPrivateRoom(id="ROOM-WET-PV-003", price=300)
+  wr_s1 = WetSharedRoom(id="ROOM-WET-SH-001", price=0)
 
+  # Resource //
+  res1 = Resource(id="RES-0001-BED", name="Massage Bed", amount=1)
+  res2 = Resource(id="RES-0002-BED", name="Massage Bed", amount=1)
+  res3 = Resource(id="RES-0003-BED", name="Massage Bed", amount=1)
+  res4 = Resource(id="RES-0004-BED", name="Massage Bed", amount=1)
+  res5 = Resource(id="RES-0005-BED", name="Massage Bed", amount=1)
+  res6 = Resource(id="RES-0006-BED", name="Massage Bed", amount=1)
+  res7 = Resource(id="RES-0007-POOL", name="Hydrotherapy Pool", amount=1)
+  res8 = Resource(id="RES-0008-POOL", name="Hydrotherapy Pool", amount=1)
+  res9 = Resource(id="RES-0009-POOL", name="Hydrotherapy Pool", amount=1)
 
+  # Add on //
+  add_on1 = AddOn(id="OIL-P", name="Premium Essential Oil", price=350)
+  add_on2 = AddOn(id="CMP-H", name="Herbal Compress", price=250)
+  add_on3 = AddOn(id="SCRB-D", name="Detox Scrub", price=450) 
+  add_on4 = AddOn(id="SNK-S", name="After-Service Snack Set", price=150) 
 
+  # Create Operation Officer //
+  reg1 = RegistrationOfficer(id="0001", name="Kevin", spa=spa, password="12345")
+  ad1 = Administrative(id="0002", name="Paul", spa=spa, password="12345")
 
-  #Resource //
-  res1 = Resource(id="RES-0001-BED", name="Massage Bed",amount=1)
-  res2 = Resource(id="RES-0002-BED", name="Massage Bed",amount=1)
-  res3 = Resource(id="RES-0003-BED", name="Massage Bed",amount=1)
-  res4 = Resource(id="RES-0004-BED", name="Massage Bed",amount=1)
-  res5 = Resource(id="RES-0005-BED", name="Massage Bed",amount=1)
-  res6 = Resource(id="RES-0006-BED", name="Massage Bed",amount=1)
-  res7 = Resource(id="RES-0007-POOL", name="Hydrotherapy Pool",amount=1)
-  res8 = Resource(id="RES-0008-POOL", name="Hydrotherapy Pool",amount=1)
-  res9 = Resource(id="RES-0009-POOL", name="Hydrotherapy Pool",amount=1)
+  # Add themselves //
+  reg1.add_employee(reg1)
+  reg1.add_employee(ad1)  
 
-
-  #Addon//
-  addOn1 = AddOn(id = "OIL-P", name = "Premium Essential Oil", price = 350)
-  addOn2 = AddOn(id = "CMP-H", name = "Herbal Compress", price = 250)
-  addOn3 = AddOn(id = "SCRB-D", name = "Detox Scrub", price = 450) 
-  addOn4 = AddOn(id = "SNK-S", name = "After-Service Snack Set", price = 150) 
-
+  # Login //
+  spa.verify_admin(reg1.id, "12345")
   
-  #Create Operation Officer//
-  Reg1 = RegistrationOfficer(id = "0001", name = "Kevin", Spa = spa, password = "12345")
-  Ad1 = Administrative(id = "0002", name = "Paul", password = "12345")
+  # Add service //
+  reg1.add_treatment(massage1)
+  reg1.add_treatment(massage2)
+  reg1.add_treatment(massage3)
+  reg1.add_treatment(massage4)
+  reg1.add_treatment(aroma)
+  reg1.add_treatment(pool)
 
-
-
-  #Add them self//
-  Reg1.addEmployee(Reg1)
-  Reg1.addEmployee(Ad1)  
-
-  #Login//
-  # Reg1.verifyPassword(spa,"1234")
-  spa.verifyAdmin(Reg1.id,"12345")
-
- 
-  
-  #Add service//
-  Reg1.addTreatment(massage1)
-  Reg1.addTreatment(massage2)
-  Reg1.addTreatment(massage3)
-  Reg1.addTreatment(massage4)
-  Reg1.addTreatment(aroma)
-  Reg1.addTreatment(pool)
-
-
-  #Add customer//
-  Reg1.addCustomer(c1)
-  Reg1.addCustomer(c2)
-  Reg1.addCustomer(c3)
-  Reg1.addCustomer(c4)
-  Reg1.addCustomer(c5)
-  Reg1.addCustomer(c6)
-  Reg1.addCustomer(c7)
-  Reg1.addCustomer(c8)
-  Reg1.addCustomer(c9)
-  Reg1.addCustomer(c10)
-
+  # Add customer //
+  reg1.add_customer(c1)
+  reg1.add_customer(c2)
+  reg1.add_customer(c3)
+  reg1.add_customer(c4)
+  reg1.add_customer(c5)
+  reg1.add_customer(c6)
+  reg1.add_customer(c7)
+  reg1.add_customer(c8)
+  reg1.add_customer(c9)
+  reg1.add_customer(c10)
 
   # Add employee //
-  endDateMonth = date(2026,1,31)
+  end_date_month = date(2026, 1, 31)
 
-  Reg1.addEmployee(t1)
-  Reg1.addSlot(endDateMonth, t1, 1)
-  Reg1.addEmployee(t2)
-  Reg1.addSlot(endDateMonth, t2, 1)
-  Reg1.addEmployee(t3)
-  Reg1.addSlot(endDateMonth, t3, 1)
-  Reg1.addEmployee(t4)
-  Reg1.addSlot(endDateMonth, t4, 1)
-  Reg1.addEmployee(t5)
-  Reg1.addSlot(endDateMonth, t5, 1)
-  Reg1.addEmployee(t6)
-  Reg1.addSlot(endDateMonth, t6, 1)
-  Reg1.addEmployee(t7)
-  Reg1.addSlot(endDateMonth, t7, 1)
-  Reg1.addEmployee(t8)
-  Reg1.addSlot(endDateMonth, t8, 1)
-  Reg1.addEmployee(t9)
-  Reg1.addSlot(endDateMonth, t9, 1)
-  Reg1.addEmployee(t10)
-  Reg1.addSlot(endDateMonth, t10, 1)
+  reg1.add_employee(t1)
+  reg1.add_slot(end_date_month, t1, 1)
+  reg1.add_employee(t2)
+  reg1.add_slot(end_date_month, t2, 1)
+  reg1.add_employee(t3)
+  reg1.add_slot(end_date_month, t3, 1)
+  reg1.add_employee(t4)
+  reg1.add_slot(end_date_month, t4, 1)
+  reg1.add_employee(t5)
+  reg1.add_slot(end_date_month, t5, 1)
+  reg1.add_employee(t6)
+  reg1.add_slot(end_date_month, t6, 1)
+  reg1.add_employee(t7)
+  reg1.add_slot(end_date_month, t7, 1)
+  reg1.add_employee(t8)
+  reg1.add_slot(end_date_month, t8, 1)
+  reg1.add_employee(t9)
+  reg1.add_slot(end_date_month, t9, 1)
+  reg1.add_employee(t10)
+  reg1.add_slot(end_date_month, t10, 1)
 
-  Reg1.addRoom(dr_p1)
-  Reg1.addSlot(endDateMonth, dr_p1, 1)
-  Reg1.addRoom(dr_p2)
-  Reg1.addSlot(endDateMonth, dr_p2, 1)
-  Reg1.addRoom(dr_p3)
-  Reg1.addSlot(endDateMonth, dr_p3, 1)
-  Reg1.addRoom(wr_p1)
-  Reg1.addSlot(endDateMonth, wr_p1, 1)
-  Reg1.addRoom(wr_p2)
-  Reg1.addSlot(endDateMonth, wr_p2, 1)
-  Reg1.addRoom(wr_p3)
-  Reg1.addSlot(endDateMonth, wr_p3, 1)
-  Reg1.addRoom(dr_s1)
-  Reg1.addSlot(endDateMonth, dr_s1, 10)
-  Reg1.addRoom(wr_s1)
-  Reg1.addSlot(endDateMonth, wr_s1, 10)
+  reg1.add_room(dr_p1)
+  reg1.add_slot(end_date_month, dr_p1, 1)
+  reg1.add_room(dr_p2)
+  reg1.add_slot(end_date_month, dr_p2, 1)
+  reg1.add_room(dr_p3)
+  reg1.add_slot(end_date_month, dr_p3, 1)
+  reg1.add_room(wr_p1)
+  reg1.add_slot(end_date_month, wr_p1, 1)
+  reg1.add_room(wr_p2)
+  reg1.add_slot(end_date_month, wr_p2, 1)
+  reg1.add_room(wr_p3)
+  reg1.add_slot(end_date_month, wr_p3, 1)
+  reg1.add_room(dr_s1)
+  reg1.add_slot(end_date_month, dr_s1, 10)
+  reg1.add_room(wr_s1)
+  reg1.add_slot(end_date_month, wr_s1, 10)
 
-  Reg1.addResource(dr_p1.id,res1)
-  Reg1.addResource(dr_p2.id,res2)
-  Reg1.addResource(dr_p3.id,res3)
-  Reg1.addResource(dr_s1.id,res4)
-  Reg1.addResource(wr_p1.id,res5)
-  Reg1.addResource(wr_p2.id,res6)
-  Reg1.addResource(wr_p3.id,res7)
-  Reg1.addResource(wr_s1.id,res8)
-  Reg1.addResource(wr_s1.id,res9)
+  reg1.add_resource(dr_p1.id, res1)
+  reg1.add_resource(dr_p2.id, res2)
+  reg1.add_resource(dr_p3.id, res3)
+  reg1.add_resource(dr_s1.id, res4)
+  reg1.add_resource(wr_p1.id, res5)
+  reg1.add_resource(wr_p2.id, res6)
+  reg1.add_resource(wr_p3.id, res7)
+  reg1.add_resource(wr_s1.id, res8)
+  reg1.add_resource(wr_s1.id, res9)
   
-  Reg1.addAddOn(addOn1)
-  Reg1.addAddOn(addOn2)
-  Reg1.addAddOn(addOn3)
-  Reg1.addAddOn(addOn4)
+  reg1.add_add_on(add_on1)
+  reg1.add_add_on(add_on2)
+  reg1.add_add_on(add_on3)
+  reg1.add_add_on(add_on4)
    
   return spa
 
 spa = init_system()
 
-@app.get("/getSlot/{customerId}/{therapistId}/{date}/{treatmentId}/{roomType}")
-# @mcp.tool
-def findFreeSlot(customerId: str,therapistId:str,date_ :str,treatmentId:str,roomType:str):
-    YMD = date_.split('-')
-    day = int(YMD[2])
-    month = int(YMD[1])
-    year = int(YMD[0])
-    dateClass = date(year,month,day)
-    customer = spa.searchCustomerById(customerId)
-    therapist = spa.searchEmployeeById(therapistId)
-    therapistSlot = spa.getEmployeeSlot(therapist,dateClass)
-    treatment = spa.searchTreatmentById(treatmentId)
-    roomType = f'ROOM-{treatment.roomType}-{roomType}'
-    roomList = spa.getRoomByRoomType(roomType)
-    freeSlotFromFindIntersectFreeSlot = []
-    for room in roomList:
-       roomSlot = spa.getRoomSlot(room,dateClass)
-       freeSlotFromFindIntersectFreeSlot.append((room,spa.findIntersectFreeSlot(roomSlot,therapistSlot)))
-    print(freeSlotFromFindIntersectFreeSlot)
-    return freeSlotFromFindIntersectFreeSlot
+@app.get("/getSlot/{customer_id}/{therapist_id}/{date_str}/{treatment_id}/{room_type}")
+def find_free_slot(customer_id: str, therapist_id: str, date_str: str, treatment_id: str, room_type: str):
+    ymd = date_str.split('-')
+    day = int(ymd[2])
+    month = int(ymd[1])
+    year = int(ymd[0])
+    date_class = date(year, month, day)
+    customer = spa.search_customer_by_id(customer_id)
+    therapist = spa.search_employee_by_id(therapist_id)
+    therapist_slot = spa.get_employee_slot(therapist, date_class)
+    treatment = spa.search_treatment_by_id(treatment_id)
+    room_type_str = f'ROOM-{treatment.room_type}-{room_type}'
+    room_list = spa.get_room_by_room_type(room_type_str)
+    free_slot_from_find_intersect_free_slot = []
+    
+    for room in room_list:
+       room_slot = spa.get_room_slot(room, date_class)
+       free_slot_from_find_intersect_free_slot.append((room, spa.find_intersect_free_slot(room_slot, therapist_slot)))
+       
+    print(free_slot_from_find_intersect_free_slot)
+    return free_slot_from_find_intersect_free_slot
 
-# freeSlot  = findFreeSlot("C0001","T0005",date(2026,1,10),"TM-01","PV")
-
-@app.post("/cancleBook/{bookId}/{customerId}")
-def cancleBook(bookId,customerId):
-    customer = spa.searchCustomerById(customerId)
-    book = customer.searchBookingById(bookId)
-    customer.cancleBook(bookId)
-    for treatment in book.treatmentList:
-      room = spa.searchRoomById(treatment.room.id)
-      therapist = spa.searchEmployeeById(treatment.therapist.id)
-      timeSlotList = treatment.timeSlot
-      roomSlot = spa.getRoomSlot(room,treatment.date)
-      therapistSlot = spa.getEmployeeSlot(therapist,treatment.date)
-      for time in timeSlotList:
-        for slot_ in roomSlot:
-            if slot_.slotOrder == time:
+@app.post("/cancelBooking/{booking_id}/{customer_id}")
+def cancel_booking(booking_id, customer_id):
+    customer = spa.search_customer_by_id(customer_id)
+    booking = customer.search_booking_by_id(booking_id)
+    customer.cancel_booking(booking_id)
+    
+    for treatment in booking.treatment_list:
+      room = spa.search_room_by_id(treatment.room.id)
+      therapist = spa.search_employee_by_id(treatment.therapist.id)
+      time_slot_list = treatment.time_slot
+      room_slot = spa.get_room_slot(room, treatment.date)
+      therapist_slot = spa.get_employee_slot(therapist, treatment.date)
+      
+      for time in time_slot_list:
+        for slot_ in room_slot:
+            if slot_.slot_order == time:
                 slot_.vacancy += 1
-                # print(slot_.slotOrder)
-                # print(slot_.vacancy)
-        for slot_ in therapistSlot:
-            if slot_.slotOrder == time:
+        for slot_ in therapist_slot:
+            if slot_.slot_order == time:
                 slot_.vacancy = 1
-                # print(slot_.slotOrder)
-                # print(slot_.vacancy)
-    return "Cancle Sucsess✅"
+                
+    return "Cancel Success✅"
 
+@app.post("/requestBooking/{customer_id}/{treatment_id_list}/{room_id_list}/{date_booking_str}/{time_slot_list_str}/{add_on_list_str}/{therapist_id_list}")
+def request_booking(customer_id, treatment_id_list_str, room_id_list_str, date_booking_str, time_slot_list_str, add_on_list_str, therapist_id_list_str):
+    ymd = date_booking_str.split('-')
+    day = int(ymd[2])
+    month = int(ymd[1])
+    year = int(ymd[0])
+    date_booking = date(year, month, day)
+    
+    time_slot_list = time_slot_list_str.split('-')
+    manage_slot = []
+    for i in range(len(time_slot_list)):
+      slot = time_slot_list[i].split(',')
+      slot_num = [int(order) for order in slot]
+      manage_slot.append(slot_num)
+      
+    add_on_list = add_on_list_str.split('&')
+    manage_add_on = []
+    for i in range(len(add_on_list)):
+      add_on = add_on_list[i].split(',')
+      manage_add_on.append(add_on)
+      
+    treatment_id_list = treatment_id_list_str.split(',')
+    room_id_list = room_id_list_str.split(',')
+    therapist_id_list = therapist_id_list_str.split(',')
 
-# def cancleBook(bookId,customerId):
-#    spa.requestToCancleBook(bookId,customerId)
-
-
-@app.post("/requestBooking/{customerId}/{treatmentIdList}/{roomIdList}/{dateBook}/{timeSlotList}/{addOnListList}/{therapistIdList}")
-def requestBooking(customerId,treatmentIdList_,roomIdList_,dateBook_,timeSlotList_,addOnListList_,therapistIdList_):
-    YMD = dateBook_.split('-')
-    day = int(YMD[2])
-    month = int(YMD[1])
-    year = int(YMD[0])
-    dateBook = date(year,month,day)
-    timeSlotList = timeSlotList_.split('-')
-    manageSlot = []
-    slot = []
-    treatmentIdList = treatmentIdList_.split(',')
-    roomIdList = roomIdList_.split(',')
-    therapistIdList = therapistIdList_.split(',')
-    addOnListList = addOnListList_.split('&')
-    manageAddOn = []
-    addOn = []
-    for i in range(len(timeSlotList)):
-      slot = timeSlotList[i].split(',')
-      slotNum = []
-      for order in slot:
-        slotNum.append(int(order))
-      manageSlot.append(slotNum)
-    for i in range(len(addOnListList)):
-      addOn = addOnListList[i].split(',')
-      manageAddOn.append(addOn)
-    customer = spa.searchCustomerById(customerId)
-    if customer.bookingQuota <= 0 or customer.missedCount > 2:
+    customer = spa.search_customer_by_id(customer_id)
+    if customer.booking_quota <= 0 or customer.missed_count > 2:
       return "CANNOT MAKE BOOKING"
-    d = date(2026,1,8) #วันที่ทำการจอง
-    bookId = f'BK-{d.year}{d.month if len(str(d.month)) > 1 else f'0{d.month}'}{d.day if len(str(d.day)) > 1 else f'0{d.day}'}-0001'
-    book = customer.book(bookId,customer,d)
-    for i in range(len(treatmentIdList)):
-      treatment = spa.searchTreatmentById(treatmentIdList[i])
-      room = spa.searchRoomById(roomIdList[i])
-      therapist = spa.searchEmployeeById(therapistIdList[i])
-      preAddOn = []
-      for addOnId in manageAddOn[i]:
-          addOnClass = spa.searchAddOnById(addOnId)
-          preAddOn.append(addOnClass)
-      customer.addTreatmentTransaction(bookId,treatment,dateBook,room,manageSlot[i],therapist,preAddOn)
-      slot = manageSlot[i]
-      roomSlot = spa.getRoomSlot(room,dateBook)
-      therapistSlot = spa.getEmployeeSlot(therapist,dateBook)
-      for n in range(len(slot)):
-        order = slot[n]
-        for slot_ in roomSlot:
-            if slot_.slotOrder == order:
+      
+    d = date(2026, 1, 8) 
+    booking_id = f'BK-{d.year}{d.month if len(str(d.month)) > 1 else f"0{d.month}"}{d.day if len(str(d.day)) > 1 else f"0{d.day}"}-0001'
+    
+    # แก้ไข syntax แจ้งเตือน: ก่อนหน้านี้เรียก customer.booking() ซึ่งไม่มีเมธอดชื่อนี้ คาดว่าเป็น customer.book()
+    customer.book(booking_id, customer_id, d)
+    
+    for i in range(len(treatment_id_list)):
+      treatment = spa.search_treatment_by_id(treatment_id_list[i])
+      room = spa.search_room_by_id(room_id_list[i])
+      therapist = spa.search_employee_by_id(therapist_id_list[i])
+      pre_add_on = []
+      for add_on_id in manage_add_on[i]:
+          add_on_class = spa.search_add_on_by_id(add_on_id)
+          pre_add_on.append(add_on_class)
+          
+      customer.add_treatment_transaction(booking_id, treatment, date_booking, room, manage_slot[i], therapist, pre_add_on)
+      
+      slot = manage_slot[i]
+      room_slot = spa.get_room_slot(room, date_booking)
+      therapist_slot = spa.get_employee_slot(therapist, date_booking)
+      
+      for order in slot:
+        for slot_ in room_slot:
+            if slot_.slot_order == order:
                 slot_.vacancy -= 1
-                # print(slot_.slotOrder)
-                # print(slot_.vacancy)
-        for slot_ in therapistSlot:
-            if slot_.slotOrder == order:
+        for slot_ in therapist_slot:
+            if slot_.slot_order == order:
                 slot_.vacancy = 0
-                # print(slot_.slotOrder)
-                # print(slot_.vacancy)
-    #   print(customer.searchBookingById(bookId).treatmentList[0].treatment.name)
-      return f"Booking Sucsess✅ - {bookId}"
+                
+    return f"Booking Success✅ - {booking_id}"
 
-
-@app.get("/requestToPay/{customerId}/{bookId}/{payment_type}/{payment_value}")
-def request_to_pay(customerId,bookId,payment_type,payment_value):
-    customer = spa.searchCustomerById(customerId)
-    booking = customer.searchBookingById(bookId)
-    total = booking.calculateTotal()
+@app.get("/requestToPay/{customer_id}/{booking_id}/{payment_type}/{payment_value}")
+def request_to_pay(customer_id, booking_id, payment_type, payment_value):
+    customer = spa.search_customer_by_id(customer_id)
+    booking = customer.search_booking_by_id(booking_id)
+    total = booking.calculate_total()
+    
     if payment_type == "Cash":
       cash = Cash()
-      return booking.pay_expenses(cash,deposit,money=int(payment_value))
-    elif payment_type == "Promptpay":
-      promptpay = Promptpay()
-      return booking.pay_expenses(promptpay,total,number=payment_value)  
+      return booking.pay_expenses(cash, total, money=int(payment_value)) 
+    elif payment_type == "Card":
+      card = Card()
+      return booking.pay_expenses(card, total, number=payment_value)
 
-
-# requestBooking("C0001",["TM-01"],["ROOM-DRY-PV-002"],date(2026,1,10),[[1,2]],[["OIL-P"]],["T0005"])
-# cancleBook("BK-20260108-0001","C0001")
-# Total = request_to_pay("C0001","0002","BK-20260108-0001")
-# print(Total)
+@app.get("/requestToCalculateRevenuePerDay/{admin_id}/{date}")
+def request_to_calculate_revenue_per_day(admin_id, date_):
+  ymd = date_.split('-')
+  day = int(ymd[2])
+  month = int(ymd[1])
+  year = int(ymd[0])
+  date_to_cal = date(year, month, day)
+  admin = spa.search_employee_by_id(admin_id)
+  return admin.calculate_revenue_per_day(date_to_cal)
 
 if __name__ == "__main__":
-  uvicorn.run("spa:app",host="127.0.0.1",port=8000,log_level="info")
-#   mcp.run()
-
-
-
-
-
-
-
-
-
-
-
-
-
+  uvicorn.run("spa:app", host="127.0.0.1", port=8000, log_level="info")
