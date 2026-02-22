@@ -1,5 +1,6 @@
 from __future__ import annotations
 from datetime import date, datetime, timedelta
+from enum import Enum
 from fastapi import FastAPI, HTTPException
 import uvicorn
 from pydantic import BaseModel, Field
@@ -10,6 +11,12 @@ app = FastAPI()
 # ==========================================
 # 1. DOMAIN CLASSES (FULL TYPE & VALUE VALIDATION)
 # ==========================================
+
+class SkillSets(Enum):
+  TM = "Traditional Thai Massage"
+  AT = "Aroma Therapy"
+  DT = "Deep Tissue Massage"
+  HP = "Hydrotherapy Pool"
 
 class Spa:
     def __init__(self, name: str):
@@ -721,11 +728,15 @@ class Booking:
         return "Cancel Success✅"
 
 class Therapist(Employee):
-    def __init__(self, id: str, name: str, skill: str):
+    def __init__(self, id: str, name: str, skill: SkillSets):
         super().__init__(id, name)
-        if not isinstance(skill, str): raise TypeError("Skill must be a string")
+        if not isinstance(skill, SkillSets): raise TypeError("Skill must be a SkillSets object")
         self.__skill = skill
         self.__points = 0
+
+    @property
+    def skill(self):
+      return self.__skill
 
 class Resource:
     def __init__(self, id: str, name: str, amount: int):
@@ -766,19 +777,17 @@ def init_system():
   c10 = Bronze(id="C0010", name="Flash")
   
   # Employee // 
-  t1 = Therapist(id="T0001", name="John", skill="Massage")
-  t2 = Therapist(id="T0002", name="Anna", skill="Massage")
-  t3 = Therapist(id="T0003", name="Emma", skill="Massage")
-  t4 = Therapist(id="T0004", name="Olivia", skill="Massage")
+  t1 = Therapist(id="T0001", name="John", skill=SkillSets.TM)
+  t2 = Therapist(id="T0002", name="Anna", skill=SkillSets.TM)
+
+  t3 = Therapist(id="T0003", name="Emma", skill=SkillSets.AT)
+  t4 = Therapist(id="T0004", name="Olivia", skill=SkillSets.AT)
     
-  t5 = Therapist(id="T0005", name="Justin", skill="Aroma")
-  t6 = Therapist(id="T0006", name="Sophia", skill="Aroma")
-  t7 = Therapist(id="T0007", name="Mary", skill="Aroma")
-  t8 = Therapist(id="T0008", name="Matha", skill="Aroma")
-    
-  t9 = Therapist(id="T0009", name="Ben", skill="Pool")
-  t10 = Therapist(id="T0010", name="Jane", skill="Pool")
-  t11 = Therapist(id="T0011", name="May", skill="Pool")
+  t5 = Therapist(id="T0005", name="Justin", skill=SkillSets.DT)
+  t6 = Therapist(id="T0006", name="Sophia", skill=SkillSets.DT)
+
+  t7 = Therapist(id="T0007", name="Mary", skill=SkillSets.HP)
+  t8 = Therapist(id="T0008", name="Matha", skill=SkillSets.HP)
 
   # Room //
   dr_p1 = DryPrivateRoom(id="ROOM-DRY-PV-001", price=300)
@@ -860,10 +869,6 @@ def init_system():
   reg1.add_slot(end_date_month, t7, 1)
   reg1.add_employee(t8)
   reg1.add_slot(end_date_month, t8, 1)
-  reg1.add_employee(t9)
-  reg1.add_slot(end_date_month, t9, 1)
-  reg1.add_employee(t10)
-  reg1.add_slot(end_date_month, t10, 1)
 
   reg1.add_room(dr_p1)
   reg1.add_slot(end_date_month, dr_p1, 1)
@@ -926,10 +931,17 @@ class ResponseGetSlot(BaseModel):
     slot: list[ResponseSlot]
 
 time = {
-    1: "8:00-8:30", 2: "8:30-9:00", 3: "9:00-9:30", 4: "9:30-10:00",
-    5: "10:00-10:30", 6: "10:30-11:00", 7: "11:00-11:30", 8: "11:30-12:00",
-    9: "12:00-12:30", 10: "12:30-13:00", 11: "13:00-13:30", 12: "13:30-14:00",
-    13: "14:00-14:30", 14: "14:30-15:00", 15: "15:00-15:30", 16: "15:30-16:00",
+  1: "8:00-8:30", 2: "8:30-9:00", 3: "9:00-9:30", 4: "9:30-10:00",
+  5: "10:00-10:30", 6: "10:30-11:00", 7: "11:00-11:30", 8: "11:30-12:00",
+  9: "12:00-12:30", 10: "12:30-13:00", 11: "13:00-13:30", 12: "13:30-14:00",
+  13: "14:00-14:30", 14: "14:30-15:00", 15: "15:00-15:30", 16: "15:30-16:00",
+}
+
+treatment_dict = {
+  "Traditional Thai Massage" : ["TM-01", "TM-02", "TM-03"],
+  "Aroma Therapy" : ["AT-02"],
+  "Deep Tissue Massage" : ["DT-03"],
+  "Hydrotherapy Pool" : ["HP-04"],
 }
 
 @app.post("/getSlot", response_model=list[ResponseGetSlot])
@@ -947,6 +959,12 @@ def find_free_slot(req: RequestGetSlot):
 
     treatment = spa.search_treatment_by_id(req.treatment_id)
     if not treatment: raise HTTPException(status_code=404, detail="Treatment not found")
+
+    if treatment.id not in treatment_dict.get(therapist.skill.value,[]):
+      raise HTTPException(
+            status_code=400, 
+            detail="The requested treatment does not match the selected therapist's skill ⚠️"
+        )
 
     therapist_slot = therapist.get_slot_by_date(date_class)
     room_type_str = f'ROOM-{treatment.room_type}-{req.room_type}'
@@ -1053,6 +1071,7 @@ def request_booking(req: Request_booking):
         for id in treat.addon:
             addon = spa.search_add_on_by_id(id)
             if not addon: raise HTTPException(status_code=404, detail=f"Add-on {id} not found")
+            addon.reduce_amount(1)
             addon_list.append(addon)
 
         slot = change_str_to_index_list(treat.time)
@@ -1076,11 +1095,6 @@ def request_booking(req: Request_booking):
             raise HTTPException(status_code=400, detail=str(e)) 
 
     spa.booking_count += 1
-
-    for treatment in req.treatments:
-        for addon_id in treatment.addon:
-            addon = spa.search_add_on_by_id(addon_id)
-            addon.reduce_amount(1)
 
     return Response_request_booking(status="SUCCESS", booking_id=booking_id)
 
