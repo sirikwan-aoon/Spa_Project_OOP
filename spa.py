@@ -421,6 +421,8 @@ class Treatment:
     def room_type(self): return self.__room_type
     @property
     def name(self): return self.__name
+    @property
+    def duration(self): return self.__duration
 
 class AddOn:
     def __init__(self, id: str, name: str, price: float, amount: int):
@@ -851,7 +853,7 @@ def init_system():
   reg1.add_customer(c10)
 
   # Add employee //
-  end_date_month = date(2026, 1, 31)
+  end_date_month = date(2026, 2, 28)
 
   reg1.add_employee(t1)
   reg1.add_slot(end_date_month, t1, 1)
@@ -1039,6 +1041,19 @@ def change_str_to_index_list(str_time):
         if end_time == end: return result
     return result
 
+def is_continuous(numbers):
+    if not numbers:
+        return False
+
+    numbers = sorted(numbers)
+
+    for i in range(len(numbers) - 1):
+        if numbers[i + 1] - numbers[i] != 1:
+            return False
+
+    return True
+
+
 @app.post("/requestBooking", response_model=Response_request_booking)
 def request_booking(req: Request_booking):
     try:
@@ -1052,7 +1067,7 @@ def request_booking(req: Request_booking):
     if customer.booking_quota <= len(customer.booking_list) or customer.missed_count > 2:
         raise HTTPException(status_code=400, detail="CANNOT MAKE BOOKING: Quota exceeded or missed too many")
 
-    d = date(2026, 1, 8) 
+    d = date.today()
     booking_id = f'BK-{d.year}{d.month if len(str(d.month)) > 1 else f"0{d.month}"}{d.day if len(str(d.day)) > 1 else f"0{d.day}"}-{spa.booking_count}'
 
     customer.book(booking_id, customer.id, d)
@@ -1068,6 +1083,18 @@ def request_booking(req: Request_booking):
         if not therapist: raise HTTPException(status_code=404, detail=f"Therapist {treat.therapist_id} not found")
 
         addon_list = []
+       
+        addon_list_enough = []
+        addon_list_not_enough = []
+        for id in treat.addon:
+            addon = spa.search_add_on_by_id(id)
+            if addon.amount < 1:
+                addon_list_not_enough.append(addon)
+            else:
+                addon_list_enough.append(addon)
+
+        if len(addon_list_not_enough) >= 1: raise HTTPException(status_code=404, detail=f"{', '.join(str(addon.id) for addon in addon_list_not_enough)} was not enough")
+
         for id in treat.addon:
             addon = spa.search_add_on_by_id(id)
             if not addon: raise HTTPException(status_code=404, detail=f"Add-on {id} not found")
@@ -1076,6 +1103,8 @@ def request_booking(req: Request_booking):
 
         slot = change_str_to_index_list(treat.time)
         if not slot: raise HTTPException(status_code=400, detail="Invalid time format")
+        if not is_continuous(slot): raise HTTPException(status_code=404, detail=f"Invalid, Time must be continuous")
+        if len(slot)*30 != treatment.duration : raise HTTPException(status_code=400, detail=f"Time must be exactly {treatment.duration} minutes.")
 
         treatment_transaction = TreatmentTransaction(customer, treatment, date_booking, room, slot, therapist, addon_list)
         customer.add_treatment_transaction(booking_id, treatment_transaction)
@@ -1119,6 +1148,134 @@ def request_booking(req: Request_booking):
 # print(request_booking(request_data))
 
 # print(find_free_slot(RequestGetSlot(customer_id = "C0001", therapist_id = "T0001", treatment_id = "TM-01", room_type = "SH", year = 2026, month = 1, day = 10)))
+
+
+class Request_to_pay(BaseModel):
+  customer_id:str
+  booking_id:str
+  payment_type:str
+  payment_value:int
+@app.post("/requestToPay",response_model=str)
+def request_to_pay(req :Request_to_pay):
+    customer = spa.search_customer_by_id(req.customer_id)
+    booking = customer.search_booking_by_id(req.booking_id)
+    total = booking.calculate_total()
+    
+    if req.payment_type == "Cash":
+      cash = Cash()
+      return booking.pay_expenses(cash, total, money=req.payment_value) 
+    elif req.payment_type == "Card":
+      card = Card()
+      return booking.pay_expenses(card, total, number=req.payment_value)
+
+
+
+class Request_to_calculate_revenue_per_day(BaseModel):
+   admin_id:str
+   year:int
+   month:int
+   day:int
+class Response_addon_usage(BaseModel):
+  addon_id:str
+  count:int
+class Response_treatment_usage(BaseModel):
+  treatment_id:str
+  count:int
+class Response_report_per_day(BaseModel):
+  day:int
+  year:int
+  month:int
+  total:float
+  addon_list_count:list[Response_addon_usage]
+  treatment_list_count:list[Response_treatment_usage]
+@app.post("/requestToCalculateRevenuePerDay",response_model=Response_report_per_day)
+def request_to_calculate_revenue_per_day(req :Request_to_calculate_revenue_per_day):
+  # PART 1 -> GET DATE(WORK ACCORDING TO SEQUENCE)
+  date_to_cal = date(req.year, req.month, req.day)
+  admin = spa.search_employee_by_id(req.admin_id)
+  report = admin.calculate_revenue_per_day(date_to_cal)
+
+  # PART 2 -> PARSE INTO JSON
+  result = Response_report_per_day(day=report.date.day,
+                                   month=report.date.month,
+                                   year=report.date.year,
+                                   total=report.total,
+                                   addon_list_count=[Response_addon_usage(addon_id=addon.resource.id,count=addon.count) for addon in report.addon_count],
+                                   treatment_list_count=[Response_treatment_usage(treatment_id=addon.resource.id,count=addon.count) for addon in report.treatment_count]
+                                   )
+  return result
+
+
+
+
+class Response_employee_slot(BaseModel):
+    time:str
+    room_id:str
+    treatment_id:str
+    customer_id:str
+class Response_employee_schedule(BaseModel):
+  year:int
+  month:int
+  day:int
+  slot:list[Response_employee_slot]
+class Request_employee_schedule(BaseModel):
+  employee_id:str
+  year:int
+  month:int
+  day:int
+@app.post("/requestEmployeeSchedule",response_model=Response_employee_schedule)
+def request_employee_schedule(req :Request_employee_schedule):
+  # PART 1 -> GET DATE(WORK ACCORDING TO SEQUENCE)
+  employee = spa.search_employee_by_id(req.employee_id)
+  d = date(req.year,req.month,req.day)
+  slot_day = employee.get_slot_by_date(d)
+
+  # PART 2 -> PARSE INTO JSON
+  sub_result = []
+  for slot in slot_day:
+   if slot.vacancy == 1:
+    sub_result.append(Response_employee_slot(time=time[slot.slot_order],room_id="",treatment_id="",customer_id=""))
+   else:
+    sub_result.append(Response_employee_slot(time=time[slot.slot_order],room_id=slot.treatment_transaction[0].room.id,treatment_id=slot.treatment_transaction[0].treatment.id,customer_id=slot.treatment_transaction[0].customer.id))
+  result = Response_employee_schedule(year=req.year,month=req.month,day=req.day,slot=sub_result)
+  return result 
+
+
+
+
+class Response_room_detail(BaseModel):
+  customer_id:str
+  treatment_id:str
+  employee_id:str
+class Response_room_slot(BaseModel):
+  time:str
+  detail: list[Response_room_detail]
+class Response_room_schedule(BaseModel):
+  year:int
+  month:int
+  day:int
+  slot:list[Response_room_slot]
+class Request_room_schedule(BaseModel):
+  room_id:str
+  year:int
+  month:int
+  day:int
+@app.post("/requestRoomSchedule",response_model=Response_room_schedule)
+def request_room_schedule(req :Request_room_schedule):
+  # PART 1 -> GET DATE(WORK ACCORDING TO SEQUENCE)
+  room = spa.search_room_by_id(req.room_id)
+  d = date(req.year,req.month,req.day)
+  slot_day = room.get_slot_by_date(d)
+  sub_result = []
+
+  # PART 2 -> PARSE INTO JSON
+  for slot in slot_day:
+   sub_sub_result = []
+   for treatment in slot.treatment_transaction:
+       sub_sub_result.append(Response_room_detail(customer_id=treatment.customer.id,treatment_id=treatment.treatment.id,employee_id=treatment.therapist.id))
+   sub_result.append(Response_room_slot(time=time[slot.slot_order],detail=sub_sub_result))
+  result = Response_room_schedule(year=req.year,month=req.month,day=req.day,slot=sub_result)
+  return result 
 
 if __name__ == "__main__":
     uvicorn.run("spa:app", host="127.0.0.1", port=8000, log_level="info")
