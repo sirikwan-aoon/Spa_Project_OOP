@@ -2,6 +2,7 @@ from datetime import date, datetime, timedelta
 from fastapi import FastAPI
 import uvicorn
 from typing import Union
+from pydantic import BaseModel
 
 from fastmcp import FastMCP
 from abc import ABC, abstractmethod
@@ -130,10 +131,16 @@ class Employee:
             slot_in_date.append(slot)
     return slot_in_date
 
+  def get_slot_by_date_time(self,date,time):
+    slot_in_date = self.get_slot_by_date(date)
+    for slot in slot_in_date:
+        if slot.slot_order == time:
+           return slot
+
   def add_slot_by_time(self,slot_list,time):
       for slot_ in slot_list:
             if slot_.slot_order == time:
-                slot_.vacancy = 1
+                slot_.vacancy += 1
 
 class Admin(Employee):
   def __init__(self, id, name, spa, password):
@@ -256,9 +263,13 @@ class Customer:
     booking = Booking(id, self, date)
     self.__booking_list.append(booking)
   
-  def add_treatment_transaction(self, booking_id, treatment_id, date, room_id, time_slot, therapist, add_on_list):
+  def add_treatment_transaction(self,booking_id,treatment_transaction):
     booking = self.search_booking_by_id(booking_id)
-    booking.treatment_list.append(TreatmentTransaction(treatment_id, date, room_id, time_slot, therapist, add_on_list))
+    booking.treatment_list.append(treatment_transaction)
+
+
+  
+
   
 
 
@@ -320,7 +331,8 @@ class Platinum(Customer):
     return self.__booking_quota
 
 class TreatmentTransaction:
-    def __init__(self, treatment, date, room, time_slot, therapist, add_on_list):
+    def __init__(self,customer,treatment, date, room, time_slot, therapist, add_on_list):
+      self.__customer = customer
       self.__treatment = treatment
       self.__date = date
       self.__room = room
@@ -328,6 +340,11 @@ class TreatmentTransaction:
       self.__add_on_list = add_on_list
       self.__therapist = therapist
       self.__status = ""
+
+
+    @property
+    def customer(self):
+      return self.__customer
 
     @property  
     def treatment(self):
@@ -354,6 +371,11 @@ class TreatmentTransaction:
       return self.__therapist
 
     def cancle(self):
+      for time in self.__time_slot:
+        room_slot = self.room.get_slot_by_date_time(self.__date,time)
+        therapist_slot = self.therapist.get_slot_by_date_time(self.__date,time)
+        room_slot.remove_treatment_transaction(self)
+        therapist_slot.remove_treatment_transaction(self)
       self.__status = "CANCLE"
       return self.__status == "CANCLE"
 
@@ -426,11 +448,20 @@ class Room:
             slot_in_date.append(slot)
     return slot_in_date
 
+  def get_slot_by_date_time(self,date,time):
+    slot_in_date = self.get_slot_by_date(date)
+    for slot in slot_in_date:
+        if slot.slot_order == time:
+           return slot
+
+
 
   def add_slot_by_time(self,slot_list,time):
       for slot_ in slot_list:
             if slot_.slot_order == time:
                 slot_.vacancy = 1
+
+
 
 
 class DryPrivateRoom(Room):
@@ -447,21 +478,34 @@ class DrySharedRoom(Room):
     super().__init__(id)
     self.__price = price
 
+  @property
+  def price(self):
+    return self.__price
+
 class WetPrivateRoom(Room):
   def __init__(self, id, price):
     super().__init__(id)
     self.__price = price
+
+  @property
+  def price(self):
+    return self.__price
 
 class WetSharedRoom(Room):
   def __init__(self, id, price):
     super().__init__(id)
     self.__price = price
 
+  @property
+  def price(self):
+    return self.__price
+
 class Slot:
   def __init__(self, date, slot_order, vacancy):
       self.__date = date
       self.__slot_order = slot_order
       self.__vacancy = vacancy
+      self.__treatment_transaction = []
 
   @property
   def date(self):
@@ -478,6 +522,22 @@ class Slot:
   @vacancy.setter
   def vacancy(self, value):
       self.__vacancy = value
+
+  @property
+  def treatment_transaction(self):
+    return self.__treatment_transaction
+
+  def add_treatment_transaction(self,transaction):
+    self.__treatment_transaction.append(transaction)
+    self.__vacancy -= 1
+
+  def remove_treatment_transaction(self,transaction):
+    self.__treatment_transaction.remove(transaction)
+    self.__vacancy += 1
+  
+  
+
+
 
 class Administrative(Admin):
   def __init__(self, id, name, spa, password):
@@ -515,11 +575,7 @@ class Administrative(Admin):
 
     report_revenue = RevenuePerDay(date, total_sum, booking_count, addon_count, treatment_count)
     self.spa.revenue_per_day_list.append(report_revenue)
-
-    addon_list_text = "".join([f" {res.resource.id}: {res.count} items" for res in addon_count])
-    treatment_list_text = "".join([f" {res.resource.id}: {res.count} items" for res in treatment_count])
-
-    return f"Date : {date} Total Revenue : {total_sum} ฿ Add on usage: {addon_list_text} Treatment usage: {treatment_list_text}"
+    return report_revenue
 
 class RevenuePerDay:
   def __init__(self, date, total, booking_count, addon_count, treatment_count):
@@ -544,6 +600,18 @@ class RevenuePerDay:
   @total.setter
   def total(self,value):
     self.__total = value
+  
+  @property
+  def date(self):
+    return self.__date
+  @property
+  def addon_count(self):
+    return self.__addon_count
+  @property
+  def treatment_count(self):
+    return self.__treatment_count 
+
+
 
 class ResourceCount:
   def __init__(self, resource):
@@ -625,7 +693,6 @@ class Booking:
 
   def calculate_total(self):
     total = 0
-
     for treatment in self.treatment_list:
       total += treatment.treatment.price
       total += treatment.room.price
@@ -647,24 +714,15 @@ class Booking:
 
   def cancle(self):
     for treatment in self.__treatment_list:
-      room = treatment.room
-      therapist = treatment.therapist
-      time_slot_list = treatment.time_slot
-      room_slot = room.get_slot_by_date(treatment.date)
-      therapist_slot = therapist.get_slot_by_date(treatment.date)
       treatment.cancle()
-      for time in time_slot_list:
-        room.add_slot_by_time(room_slot,time)
-        employee.add_slot_by_time(therapist_slot,time)
-          
     
-    if booking.treatment_list[0].date - date.today() > timedelta(days=1):
-      self.__notice_list.append(Message(self.__id, "Refund deposit 50%", datetime.now()))
-    else:
-      self.__notice_list.append(Message(self.__id, "No refund deposit", datetime.now()))
+    # if self.__treatment_list[0].date - date.today() > timedelta(days=1):
+    #   self.__notice_list.append(Message(self.__id, "Refund deposit 50%", datetime.now()))
+    # else:
+    #   self.__notice_list.append(Message(self.__id, "No refund deposit", datetime.now()))
 
     self.__status = "CANCEL"
-    
+
     return "Cancel Success✅"
 
 
@@ -728,6 +786,8 @@ def init_system():
   dr_p2 = DryPrivateRoom(id="ROOM-DRY-PV-002", price=300)
   dr_p3 = DryPrivateRoom(id="ROOM-DRY-PV-003", price=300)
   dr_s1 = DrySharedRoom(id="ROOM-DRY-SH-001", price=0)
+  dr_s2 = DrySharedRoom(id="ROOM-DRY-SH-002", price=0)
+
     
   wr_p1 = WetPrivateRoom(id="ROOM-WET-PV-001", price=300)
   wr_p2 = WetPrivateRoom(id="ROOM-WET-PV-002", price=300)
@@ -820,6 +880,8 @@ def init_system():
   reg1.add_slot(end_date_month, wr_p3, 1)
   reg1.add_room(dr_s1)
   reg1.add_slot(end_date_month, dr_s1, 10)
+  reg1.add_room(dr_s2)
+  reg1.add_slot(end_date_month, dr_s2, 10)
   reg1.add_room(wr_s1)
   reg1.add_slot(end_date_month, wr_s1, 10)
 
@@ -842,117 +904,282 @@ def init_system():
 
 spa = init_system()
 
-@app.get("/getSlot/{customer_id}/{therapist_id}/{date_str}/{treatment_id}/{room_type}")
-def find_free_slot(customer_id: str, therapist_id: str, date_str: str, treatment_id: str, room_type: str):
-    ymd = date_str.split('-')
-    day = int(ymd[2])
-    month = int(ymd[1])
-    year = int(ymd[0])
-    date_class = date(year, month, day)
-    customer = spa.search_customer_by_id(customer_id)
-    therapist = spa.search_employee_by_id(therapist_id)
+class RequestGetSlot(BaseModel):
+    customer_id: str
+    therapist_id: str
+    treatment_id: str
+    room_type: str
+    year: int
+    month: int
+    day: int
+class ResponseSlot(BaseModel):
+    time:str
+class ResponseGetSlot(BaseModel):
+    room_id: str
+    year: int
+    month: int
+    day: int
+    slot: list[ResponseSlot]
+time = {
+    1: "8:00-8:30",
+    2: "8:30-9:00",
+    3: "9:00-9:30",
+    4: "9:30-10:00",
+    5: "10:00-10:30",
+    6: "10:30-11:00",
+    7: "11:00-11:30",
+    8: "11:30-12:00",
+    9: "12:00-12:30",
+    10: "12:30-13:00",
+    11: "13:00-13:30",
+    12: "13:30-14:00",
+    13: "14:00-14:30",
+    14: "14:30-15:00",
+    15: "15:00-15:30",
+    16: "15:30-16:00",
+}
+@app.post("/getSlot",response_model=list[ResponseGetSlot])
+def find_free_slot(req :RequestGetSlot):
+    # PART 1 -> GET DATE(WORK ACCORDING TO SEQUENCE)
+    date_class = date(req.year, req.month, req.day)
+    customer = spa.search_customer_by_id(req.customer_id)
+    therapist = spa.search_employee_by_id(req.therapist_id)
     therapist_slot = therapist.get_slot_by_date(date_class)
-    treatment = spa.search_treatment_by_id(treatment_id)
-    room_type_str = f'ROOM-{treatment.room_type}-{room_type}'
+    treatment = spa.search_treatment_by_id(req.treatment_id)
+    room_type_str = f'ROOM-{treatment.room_type}-{req.room_type}'
     room_list = spa.get_room_by_room_type(room_type_str)
-    free_slot_from_find_intersect_free_slot = []
-    
-    for room in room_list:
-       room_slot = room.get_slot_by_date(date_class)
-       free_slot_from_find_intersect_free_slot.append((room, spa.find_intersect_free_slot(room_slot, therapist_slot)))
-       
-    print(free_slot_from_find_intersect_free_slot)
-    return free_slot_from_find_intersect_free_slot
+    result = []
 
-@app.post("/cancelBooking/{booking_id}/{customer_id}")
-def cancel_booking(booking_id, customer_id):
-    customer = spa.search_customer_by_id(customer_id)
-    booking = customer.search_booking_by_id(booking_id)
+    for room in room_list:
+        room_slot = room.get_slot_by_date(date_class)
+        free_slots = spa.find_intersect_free_slot(room_slot, therapist_slot)
+        
+        # PART 2 -> PARSE INTO JSON
+        result.append(
+            ResponseGetSlot(
+                room_id=room.id,
+                year=free_slots[0].date.year,
+                month=free_slots[0].date.month,
+                day=free_slots[0].date.day,
+                slot=[ResponseSlot(
+                                      time=time[slot.slot_order],
+                                   ) for slot in free_slots]
+                            )
+                      )
+    return result
+       
+
+
+class Request_cancle_booking(BaseModel):
+  booking_id:str
+  customer_id:str
+@app.post("/cancelBooking",response_model=str)
+def cancel_booking(req :Request_cancle_booking):
+    customer = spa.search_customer_by_id(req.customer_id)
+    booking = customer.search_booking_by_id(req.booking_id)
     result = booking.cancle()
     return result
 
-@app.post("/requestBooking/{customer_id}/{treatment_id_list}/{room_id_list}/{date_booking_str}/{time_slot_list_str}/{add_on_list_str}/{therapist_id_list}")
-def request_booking(customer_id, treatment_id_list_str, room_id_list_str, date_booking_str, time_slot_list_str, add_on_list_str, therapist_id_list_str):
-    ymd = date_booking_str.split('-')
-    day = int(ymd[2])
-    month = int(ymd[1])
-    year = int(ymd[0])
-    date_booking = date(year, month, day)
-    
-    time_slot_list = time_slot_list_str.split('-')
-    manage_slot = []
-    for i in range(len(time_slot_list)):
-      slot = time_slot_list[i].split(',')
-      slot_num = [int(order) for order in slot]
-      manage_slot.append(slot_num)
-      
-    add_on_list = add_on_list_str.split('&')
-    manage_add_on = []
-    for i in range(len(add_on_list)):
-      add_on = add_on_list[i].split(',')
-      manage_add_on.append(add_on)
-      
-    treatment_id_list = treatment_id_list_str.split(',')
-    room_id_list = room_id_list_str.split(',')
-    therapist_id_list = therapist_id_list_str.split(',')
 
-    customer = spa.search_customer_by_id(customer_id)
+
+
+class Request_treatment(BaseModel):
+  therapist_id:str
+  treatment_id:str
+  room_id:str
+  time:str
+  addon:list[str]
+class Request_booking(BaseModel):
+  customer_id:str
+  year:int
+  month:int
+  day:int
+  treatments:list[Request_treatment]
+class Response_request_booking(BaseModel):
+  status:str
+  booking_id:str
+def change_str_to_index_list(str):
+    result = []
+    found_start_time = False
+    start_time,end_time = str.split("-")
+    for key,value in time.items():
+        start,end = value.split("-")
+        if start_time == start:
+            result.append(key)
+            found_start_time = True
+            if end_time == end:
+                return result
+            continue
+        if found_start_time:
+            result.append(key)
+        if end_time == end:
+            return result
+@app.post("/requestBooking",response_model=Response_request_booking)
+def request_booking(req:Request_booking):
+    # PART 1 -> GET DATE(WORK ACCORDING TO SEQUENCE)
+    date_booking = date(req.year, req.month, req.day)
+    customer = spa.search_customer_by_id(req.customer_id)
+
     if customer.booking_quota <= 0 or customer.missed_count > 2:
       return "CANNOT MAKE BOOKING"
-      
+
     d = date(2026, 1, 8) 
     booking_id = f'BK-{d.year}{d.month if len(str(d.month)) > 1 else f"0{d.month}"}{d.day if len(str(d.day)) > 1 else f"0{d.day}"}-0001'
-    
-    # แก้ไข syntax แจ้งเตือน: ก่อนหน้านี้เรียก customer.booking() ซึ่งไม่มีเมธอดชื่อนี้ คาดว่าเป็น customer.book()
-    customer.book(booking_id, customer_id, d)
-    
-    for i in range(len(treatment_id_list)):
-      treatment = spa.search_treatment_by_id(treatment_id_list[i])
-      room = spa.search_room_by_id(room_id_list[i])
-      therapist = spa.search_employee_by_id(therapist_id_list[i])
-      pre_add_on = []
-      for add_on_id in manage_add_on[i]:
-          add_on_class = spa.search_add_on_by_id(add_on_id)
-          pre_add_on.append(add_on_class)
-          
-      customer.add_treatment_transaction(booking_id, treatment, date_booking, room, manage_slot[i], therapist, pre_add_on)
-      
-      slot = manage_slot[i]
+
+    customer.book(booking_id, customer.id, d)
+
+    for treat in req.treatments:
+      treatment = spa.search_treatment_by_id(treat.treatment_id)
+      room = spa.search_room_by_id(treat.room_id)
+      therapist = spa.search_employee_by_id(treat.therapist_id)
+      addon_list = [spa.search_add_on_by_id(id) for id in treat.addon]
+      slot = change_str_to_index_list(treat.time)
+      treatment_transaction = TreatmentTransaction(customer, treatment, date_booking, room,slot, therapist, addon_list)
+      customer.add_treatment_transaction(booking_id,treatment_transaction)
       room_slot = room.get_slot_by_date(date_booking)
       therapist_slot = therapist.get_slot_by_date(date_booking)
-      
       for order in slot:
         for slot_ in room_slot:
             if slot_.slot_order == order:
-                slot_.vacancy -= 1
+                slot_.add_treatment_transaction(treatment_transaction)
         for slot_ in therapist_slot:
             if slot_.slot_order == order:
-                slot_.vacancy = 0
-                
-    return f"Booking Success✅ - {booking_id}"
+                slot_.add_treatment_transaction(treatment_transaction)
 
-@app.get("/requestToPay/{customer_id}/{booking_id}/{payment_type}/{payment_value}")
-def request_to_pay(customer_id, booking_id, payment_type, payment_value):
-    customer = spa.search_customer_by_id(customer_id)
-    booking = customer.search_booking_by_id(booking_id)
+    # PART 2 -> PARSE INTO JSON
+    return Response_request_booking(status="SUCCESS",booking_id=booking_id)
+
+
+class Request_to_pay(BaseModel):
+  customer_id:str
+  booking_id:str
+  payment_type:str
+  payment_value:int
+@app.post("/requestToPay",response_model=str)
+def request_to_pay(req :Request_to_pay):
+    customer = spa.search_customer_by_id(req.customer_id)
+    booking = customer.search_booking_by_id(req.booking_id)
     total = booking.calculate_total()
     
-    if payment_type == "Cash":
+    if req.payment_type == "Cash":
       cash = Cash()
-      return booking.pay_expenses(cash, total, money=int(payment_value)) 
-    elif payment_type == "Card":
+      return booking.pay_expenses(cash, total, money=req.payment_value) 
+    elif req.payment_type == "Card":
       card = Card()
-      return booking.pay_expenses(card, total, number=payment_value)
+      return booking.pay_expenses(card, total, number=req.payment_value)
 
-@app.get("/requestToCalculateRevenuePerDay/{admin_id}/{date}")
-def request_to_calculate_revenue_per_day(admin_id, date_):
-  ymd = date_.split('-')
-  day = int(ymd[2])
-  month = int(ymd[1])
-  year = int(ymd[0])
-  date_to_cal = date(year, month, day)
-  admin = spa.search_employee_by_id(admin_id)
-  return admin.calculate_revenue_per_day(date_to_cal)
+
+
+
+
+class Request_to_calculate_revenue_per_day(BaseModel):
+   admin_id:str
+   year:int
+   month:int
+   day:int
+class Response_addon_usage(BaseModel):
+  addon_id:str
+  count:int
+class Response_treatment_usage(BaseModel):
+  treatment_id:str
+  count:int
+class Response_report_per_day(BaseModel):
+  day:int
+  year:int
+  month:int
+  total:float
+  addon_list_count:list[Response_addon_usage]
+  treatment_list_count:list[Response_treatment_usage]
+@app.post("/requestToCalculateRevenuePerDay",response_model=Response_report_per_day)
+def request_to_calculate_revenue_per_day(req :Request_to_calculate_revenue_per_day):
+  # PART 1 -> GET DATE(WORK ACCORDING TO SEQUENCE)
+  date_to_cal = date(req.year, req.month, req.day)
+  admin = spa.search_employee_by_id(req.admin_id)
+  report = admin.calculate_revenue_per_day(date_to_cal)
+
+  # PART 2 -> PARSE INTO JSON
+  result = Response_report_per_day(day=report.date.day,
+                                   month=report.date.month,
+                                   year=report.date.year,
+                                   total=report.total,
+                                   addon_list_count=[Response_addon_usage(addon_id=addon.resource.id,count=addon.count) for addon in report.addon_count],
+                                   treatment_list_count=[Response_treatment_usage(treatment_id=addon.resource.id,count=addon.count) for addon in report.treatment_count]
+                                   )
+  return result
+
+
+
+class Response_employee_slot(BaseModel):
+  time:str
+  room_id:str
+  treatment_id:str
+  customer_id:str
+class Response_employee_schedule(BaseModel):
+  year:int
+  month:int
+  day:int
+  slot:list[Response_employee_slot]
+class Request_employee_schedule(BaseModel):
+  employee_id:str
+  year:int
+  month:int
+  day:int
+@app.post("/requestEmployeeSchedule",response_model=Response_employee_schedule)
+def request_employee_schedule(req :Request_employee_schedule):
+  # PART 1 -> GET DATE(WORK ACCORDING TO SEQUENCE)
+  employee = spa.search_employee_by_id(req.employee_id)
+  d = date(req.year,req.month,req.day)
+  slot_day = employee.get_slot_by_date(d)
+
+  # PART 2 -> PARSE INTO JSON
+  sub_result = []
+  for slot in slot_day:
+   if slot.vacancy == 1:
+    sub_result.append(Response_employee_slot(time=time[slot.slot_order],room_id="",treatment_id="",customer_id=""))
+   else:
+    sub_result.append(Response_employee_slot(time=time[slot.slot_order],room_id=slot.treatment_transaction[0].room.id,treatment_id=slot.treatment_transaction[0].treatment.id,customer_id=slot.treatment_transaction[0].customer.id))
+  result = Response_employee_schedule(year=req.year,month=req.month,day=req.day,slot=sub_result)
+  return result 
+
+
+class Response_room_detail(BaseModel):
+  customer_id:str
+  treatment_id:str
+  employee_id:str
+class Response_room_slot(BaseModel):
+  time:str
+  detail: list[Response_room_detail]
+class Response_room_schedule(BaseModel):
+  year:int
+  month:int
+  day:int
+  slot:list[Response_room_slot]
+class Request_room_schedule(BaseModel):
+  room_id:str
+  year:int
+  month:int
+  day:int
+@app.post("/requestRoomSchedule",response_model=Response_room_schedule)
+def request_room_schedule(req :Request_room_schedule):
+  # PART 1 -> GET DATE(WORK ACCORDING TO SEQUENCE)
+  room = spa.search_room_by_id(req.room_id)
+  d = date(req.year,req.month,req.day)
+  slot_day = room.get_slot_by_date(d)
+  sub_result = []
+
+  # PART 2 -> PARSE INTO JSON
+  for slot in slot_day:
+   sub_sub_result = []
+   for treatment in slot.treatment_transaction:
+       sub_sub_result.append(Response_room_detail(customer_id=treatment.customer.id,treatment_id=treatment.treatment.id,employee_id=treatment.therapist.id))
+   sub_result.append(Response_room_slot(time=time[slot.slot_order],detail=sub_sub_result))
+  result = Response_room_schedule(year=req.year,month=req.month,day=req.day,slot=sub_result)
+  return result 
+
+
+
+
+
 
 
 if __name__ == "__main__":
