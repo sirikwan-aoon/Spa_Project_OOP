@@ -5,6 +5,8 @@ from fastapi import FastAPI, HTTPException
 import uvicorn
 from pydantic import BaseModel, Field
 from abc import ABC, abstractmethod
+from datetime import datetime
+from pydantic import BaseModel
 
 app = FastAPI()
 
@@ -132,7 +134,17 @@ class Spa:
                 if room_slot[i].vacancy > 0 and therapist_slot[i].vacancy > 0:
                     list_of_intersect_free_slot.append(room_slot[i])
         return list_of_intersect_free_slot
+    
+    def generate_unique_customer_id(self) :
         
+        current_count = len(self.customer_list)
+        
+        while True:
+            current_count += 1
+            new_id = f"C{current_count:04d}"
+            
+            if self.search_customer_by_id(new_id) is None:
+                return new_id
 class Employee:
     def __init__(self, id: str, name: str):
         if not isinstance(id, str) or not isinstance(name, str):
@@ -989,12 +1001,12 @@ def find_free_slot(req: RequestGetSlot):
             )
     return result
 
-class Request_cancle_booking(BaseModel):
+class RequestCancleBooking(BaseModel):
     booking_id: str = Field(..., min_length=1)
     customer_id: str = Field(..., min_length=1)
   
 @app.post("/cancelBooking", response_model=str)
-def cancel_booking(req: Request_cancle_booking):
+def cancel_booking(req: RequestCancleBooking):
     customer = spa.search_customer_by_id(req.customer_id)
     if not customer: raise HTTPException(status_code=404, detail="Customer not found")
 
@@ -1004,21 +1016,21 @@ def cancel_booking(req: Request_cancle_booking):
     result = booking.cancle()
     return result
 
-class Request_treatment(BaseModel):
+class RequestTreatment(BaseModel):
     therapist_id: str = Field(..., min_length=1)
     treatment_id: str = Field(..., min_length=1)
     room_id: str = Field(..., min_length=1)
     time: str = Field(..., min_length=1)
     addon: list[str]
 
-class Request_booking(BaseModel):
+class RequestBooking(BaseModel):
     customer_id: str = Field(..., min_length=1)
     year: int = Field(..., ge=2024)
     month: int = Field(..., ge=1, le=12)
     day: int = Field(..., ge=1, le=31)
-    treatments: list[Request_treatment]
+    treatments: list[RequestTreatment]
 
-class Response_request_booking(BaseModel):
+class ResponseRequestBooking(BaseModel):
     status: str
     booking_id: str
 
@@ -1054,8 +1066,8 @@ def is_continuous(numbers):
     return True
 
 
-@app.post("/requestBooking", response_model=Response_request_booking)
-def request_booking(req: Request_booking):
+@app.post("/requestBooking", response_model=ResponseRequestBooking)
+def request_booking(req: RequestBooking):
     try:
         date_booking = date(req.year, req.month, req.day)
     except ValueError:
@@ -1125,7 +1137,7 @@ def request_booking(req: Request_booking):
 
     spa.booking_count += 1
 
-    return Response_request_booking(status="SUCCESS", booking_id=booking_id)
+    return ResponseRequestBooking(status="SUCCESS", booking_id=booking_id)
 
 # print(find_free_slot(RequestGetSlot(customer_id = "C0001", therapist_id = "T0001", treatment_id = "TM-01", room_type = "SH", year = 2026, month = 1, day = 10)))
 
@@ -1135,7 +1147,7 @@ def request_booking(req: Request_booking):
 #     month=1,
 #     day=10,
 #     treatments=[
-#         Request_treatment(
+#         RequestTreatment(
 #             therapist_id="T0001",  
 #             treatment_id="TM-01",
 #             room_id="ROOM-DRY-SH-001",
@@ -1150,13 +1162,13 @@ def request_booking(req: Request_booking):
 # print(find_free_slot(RequestGetSlot(customer_id = "C0001", therapist_id = "T0001", treatment_id = "TM-01", room_type = "SH", year = 2026, month = 1, day = 10)))
 
 
-class Request_to_pay(BaseModel):
+class RequestToPay(BaseModel):
   customer_id:str
   booking_id:str
   payment_type:str
   payment_value:int
 @app.post("/requestToPay",response_model=str)
-def request_to_pay(req :Request_to_pay):
+def request_to_pay(req :RequestToPay):
     customer = spa.search_customer_by_id(req.customer_id)
     booking = customer.search_booking_by_id(req.booking_id)
     total = booking.calculate_total()
@@ -1170,60 +1182,60 @@ def request_to_pay(req :Request_to_pay):
 
 
 
-class Request_to_calculate_revenue_per_day(BaseModel):
+class RequestToCalculateRevenuePerDay(BaseModel):
    admin_id:str
    year:int
    month:int
    day:int
-class Response_addon_usage(BaseModel):
+class ResponseAddOnUsage(BaseModel):
   addon_id:str
   count:int
-class Response_treatment_usage(BaseModel):
+class ResponseTreatmentUsage(BaseModel):
   treatment_id:str
   count:int
-class Response_report_per_day(BaseModel):
+class ResponseReportPerDay(BaseModel):
   day:int
   year:int
   month:int
   total:float
-  addon_list_count:list[Response_addon_usage]
-  treatment_list_count:list[Response_treatment_usage]
-@app.post("/requestToCalculateRevenuePerDay",response_model=Response_report_per_day)
-def request_to_calculate_revenue_per_day(req :Request_to_calculate_revenue_per_day):
+  addon_list_count:list[ResponseAddOnUsage]
+  treatment_list_count:list[ResponseTreatmentUsage]
+@app.post("/requestToCalculateRevenuePerDay",response_model=ResponseReportPerDay)
+def request_to_calculate_revenue_per_day(req :RequestToCalculateRevenuePerDay):
   # PART 1 -> GET DATE(WORK ACCORDING TO SEQUENCE)
   date_to_cal = date(req.year, req.month, req.day)
   admin = spa.search_employee_by_id(req.admin_id)
   report = admin.calculate_revenue_per_day(date_to_cal)
 
   # PART 2 -> PARSE INTO JSON
-  result = Response_report_per_day(day=report.date.day,
+  result = ResponseReportPerDay(day=report.date.day,
                                    month=report.date.month,
                                    year=report.date.year,
                                    total=report.total,
-                                   addon_list_count=[Response_addon_usage(addon_id=addon.resource.id,count=addon.count) for addon in report.addon_count],
-                                   treatment_list_count=[Response_treatment_usage(treatment_id=addon.resource.id,count=addon.count) for addon in report.treatment_count]
+                                   addon_list_count=[ResponseAddOnUsage(addon_id=addon.resource.id,count=addon.count) for addon in report.addon_count],
+                                   treatment_list_count=[ResponseTreatmentUsage(treatment_id=addon.resource.id,count=addon.count) for addon in report.treatment_count]
                                    )
   return result
 
 
 
 
-class Response_employee_slot(BaseModel):
+class ResponseEmployeeSlot(BaseModel):
     time:str
     room_id:str
     treatment_id:str
     customer_id:str
-class Response_employee_schedule(BaseModel):
+class ResponseEmployeeSchedule(BaseModel):
   year:int
   month:int
   day:int
-  slot:list[Response_employee_slot]
+  slot:list[ResponseEmployeeSlot]
 class Request_employee_schedule(BaseModel):
   employee_id:str
   year:int
   month:int
   day:int
-@app.post("/requestEmployeeSchedule",response_model=Response_employee_schedule)
+@app.post("/requestEmployeeSchedule",response_model=ResponseEmployeeSchedule)
 def request_employee_schedule(req :Request_employee_schedule):
   # PART 1 -> GET DATE(WORK ACCORDING TO SEQUENCE)
   employee = spa.search_employee_by_id(req.employee_id)
@@ -1234,34 +1246,34 @@ def request_employee_schedule(req :Request_employee_schedule):
   sub_result = []
   for slot in slot_day:
    if slot.vacancy == 1:
-    sub_result.append(Response_employee_slot(time=time[slot.slot_order],room_id="",treatment_id="",customer_id=""))
+    sub_result.append(ResponseEmployeeSlot(time=time[slot.slot_order],room_id="",treatment_id="",customer_id=""))
    else:
-    sub_result.append(Response_employee_slot(time=time[slot.slot_order],room_id=slot.treatment_transaction[0].room.id,treatment_id=slot.treatment_transaction[0].treatment.id,customer_id=slot.treatment_transaction[0].customer.id))
-  result = Response_employee_schedule(year=req.year,month=req.month,day=req.day,slot=sub_result)
+    sub_result.append(ResponseEmployeeSlot(time=time[slot.slot_order],room_id=slot.treatment_transaction[0].room.id,treatment_id=slot.treatment_transaction[0].treatment.id,customer_id=slot.treatment_transaction[0].customer.id))
+  result = ResponseEmployeeSchedule(year=req.year,month=req.month,day=req.day,slot=sub_result)
   return result 
 
 
 
 
-class Response_room_detail(BaseModel):
+class ResponseRoomDetail(BaseModel):
   customer_id:str
   treatment_id:str
   employee_id:str
-class Response_room_slot(BaseModel):
+class ResponseRoomSlot(BaseModel):
   time:str
-  detail: list[Response_room_detail]
-class Response_room_schedule(BaseModel):
+  detail: list[ResponseRoomDetail]
+class ResponseRoomSchedule(BaseModel):
   year:int
   month:int
   day:int
-  slot:list[Response_room_slot]
-class Request_room_schedule(BaseModel):
+  slot:list[ResponseRoomSlot]
+class RequestRoomSchedule(BaseModel):
   room_id:str
   year:int
   month:int
   day:int
-@app.post("/requestRoomSchedule",response_model=Response_room_schedule)
-def request_room_schedule(req :Request_room_schedule):
+@app.post("/requestRoomSchedule",response_model=ResponseRoomSchedule)
+def request_room_schedule(req :RequestRoomSchedule):
   # PART 1 -> GET DATE(WORK ACCORDING TO SEQUENCE)
   room = spa.search_room_by_id(req.room_id)
   d = date(req.year,req.month,req.day)
@@ -1272,10 +1284,87 @@ def request_room_schedule(req :Request_room_schedule):
   for slot in slot_day:
    sub_sub_result = []
    for treatment in slot.treatment_transaction:
-       sub_sub_result.append(Response_room_detail(customer_id=treatment.customer.id,treatment_id=treatment.treatment.id,employee_id=treatment.therapist.id))
-   sub_result.append(Response_room_slot(time=time[slot.slot_order],detail=sub_sub_result))
-  result = Response_room_schedule(year=req.year,month=req.month,day=req.day,slot=sub_result)
+       sub_sub_result.append(ResponseRoomDetail(customer_id=treatment.customer.id,treatment_id=treatment.treatment.id,employee_id=treatment.therapist.id))
+   sub_result.append(ResponseRoomSlot(time=time[slot.slot_order],detail=sub_sub_result))
+  result = ResponseRoomSchedule(year=req.year,month=req.month,day=req.day,slot=sub_result)
   return result 
 
 if __name__ == "__main__":
     uvicorn.run("spa:app", host="127.0.0.1", port=8000, log_level="info")
+
+from pydantic import BaseModel
+
+# =========================
+# API MODEL (REQUEST / RESPONSE)
+# =========================
+
+# 1. หน้าแอปส่งมาแค่ 2 อย่างนี้เท่านั้น (ลูกค้ากรอกแค่นี้)
+class RequestEnrollCustomer(BaseModel):
+    customer_name: str
+    member_type: str
+
+class ResponseEnrollCustomer(BaseModel):
+    status: str
+    customer_id: str
+    member_type: str              
+    message: str
+
+# =========================
+# HELPER METHOD: สร้าง ID ใหม่แบบไม่ซ้ำ
+# =========================
+
+
+# =========================
+# API ENDPOINT
+# =========================
+@app.post("/enrollCustomer", response_model=ResponseEnrollCustomer)
+def enroll_customer(req: RequestEnrollCustomer):
+    try:
+        # 1. ค้นหาเจ้าหน้าที่ลงทะเบียน (Registration Officer) แบบอัตโนมัติ
+        # (เนื่องจากลูกค้าไม่ได้กรอกมา ระบบจะสุ่มหาพนักงานที่มีตำแหน่งนี้มารับเรื่องให้เอง)
+        officer = None
+        for emp in spa.employee_list:
+            if isinstance(emp, RegistrationOfficer):
+                officer = emp
+                break
+                
+        if officer is None:
+            raise Exception("No Registration Officer available in the system")
+
+        # 2. ให้ระบบเจนรหัสลูกค้าให้ใหม่ โดยใช้ฟังก์ชันที่เราสร้างไว้
+        new_customer_id = spa.generate_unique_customer_id()
+
+        # 3. เช็คประเภทสมาชิกและสร้างออบเจกต์ Customer (ใช้รหัสใหม่ที่เพิ่งเจน)
+        member_type_clean = req.member_type.strip().lower()
+
+        if member_type_clean == "bronze":
+            customer = Bronze(new_customer_id, req.customer_name)
+        elif member_type_clean == "silver":
+            customer = Silver(new_customer_id, req.customer_name)
+        elif member_type_clean == "gold":
+            customer = Gold(new_customer_id, req.customer_name)
+        elif member_type_clean == "platinum":
+            customer = Platinum(new_customer_id, req.customer_name)
+        else:
+            raise Exception("Invalid member type")
+
+        # 4. ให้เจ้าหน้าที่ทำการบันทึกลูกค้าเข้าระบบ Spa
+        # (ในฟังก์ชัน add_customer มีระบบเซฟตี้อีกชั้น ถ้า id ซ้ำมันจะเด้ง ValueError)
+        officer.add_customer(customer)
+
+        # 5. ส่งผลลัพธ์ตอบกลับ พร้อมโชว์รหัสใหม่ที่ลูกค้าได้รับ
+        return ResponseEnrollCustomer(
+            status="SUCCESS",
+            customer_id=customer.id,
+            member_type=req.member_type,
+            message="Enroll success"
+        )
+
+    except Exception as e:
+        # กรณีมี Error (เช่น พิมพ์ member_type มาผิด)
+        return ResponseEnrollCustomer(
+            status="FAILED",
+            customer_id="",
+            member_type=req.member_type,
+            message=str(e)
+        )
