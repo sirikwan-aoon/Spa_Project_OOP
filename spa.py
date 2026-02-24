@@ -5,12 +5,7 @@ from fastapi import FastAPI, HTTPException
 import uvicorn
 from pydantic import BaseModel, Field
 from abc import ABC, abstractmethod
-from datetime import datetime
-from pydantic import BaseModel, Field
 
-from fastmcp import FastMCP
-
-mcp = FastMCP("TestMCP")
 
 app = FastAPI()
 
@@ -139,7 +134,7 @@ class Spa:
                     list_of_intersect_free_slot.append(room_slot[i])
         return list_of_intersect_free_slot
     
-    def generate_unique_customer_id(self) :
+    def generate_customer_id(self) :
         
         current_count = len(self.customer_list)
         
@@ -227,7 +222,7 @@ class RegistrationOfficer(Admin):
         if not self.login: raise PermissionError("Officer must login first")
         self.spa.add_customer(customer)
         notice_id = f"ENROLL_RESULT-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        customer.add_notice_list(Message(notice_id, customer, "Enroll success✅", datetime.now()))
+        customer.add_notice_list(Message(notice_id, customer, "Enroll success", datetime.now()))
   
     def add_employee(self, employee: Employee):
         if not isinstance(employee, Employee): raise TypeError("Must be an Employee object")
@@ -257,6 +252,28 @@ class RegistrationOfficer(Admin):
         if not isinstance(treatment, Treatment): raise TypeError("Must be a Treatment object")
         if not self.login: raise PermissionError("Officer must login first")
         self.spa.add_treatment(treatment)
+    
+    def enroll_new_customer(self, name , member_type):
+        
+        new_customer_id = self.spa.generate_customer_id()
+
+        m_type = member_type.strip().lower()
+
+        if m_type == "bronze":
+           customer = Bronze(new_customer_id, name)
+        elif m_type == "silver":
+           customer = Silver(new_customer_id, name)
+        elif m_type == "gold":
+           customer = Gold(new_customer_id, name)
+        elif m_type == "platinum":
+           customer = Platinum(new_customer_id, name)
+        else:
+            raise Exception("Invalid member type")
+        
+        # 3. พนักงานบันทึกลูกค้าเข้าสู่ระบบ (เรียกใช้ Method เดิมที่มีอยู่)
+        self.add_customer(customer)
+
+        return customer
 
 class Message:
     def __init__(self, id: str, receiver, text: str, date_received: datetime):
@@ -271,19 +288,6 @@ class Message:
     @property
     def text(self): return self.__text
 
-class Coupon:
-    def __init__(self, id: str, discount: float):
-        self.__id = id
-        self.__discount = discount
-
-    @property
-    def id(self):
-        return self.__id
-
-    @property
-    def discount(self):
-        return self.__discount
-
 class Customer:
     def __init__(self, id: str, name: str):
         if not isinstance(id, str) or not isinstance(name, str):
@@ -293,7 +297,6 @@ class Customer:
         self.__name = name
         self.__booking_list = []
         self.__notice_list = []
-        self.__coupon_list = []
         self.__missed_count = 0
 
     @property
@@ -306,8 +309,7 @@ class Customer:
     def missed_count(self): return self.__missed_count
     @property
     def notice_list(self): return self.__notice_list
-    @property
-    def coupon_list(self): return self.__coupon_list
+    
     @property
     def discount(self): return 0.0
     @property
@@ -316,22 +318,6 @@ class Customer:
     def add_notice_list(self, message: Message):
         if not isinstance(message, Message): raise TypeError("Must be a Message object")
         self.__notice_list.append(message)
-
-    def add_coupon_list(self, coupon: Coupon):
-        if not isinstance(coupon, Coupon): raise TypeError("Must be a Coupon object")
-        self.__coupon_list.append(coupon)
-
-    def search_coupon_by_id(self, id: str):
-        if not isinstance(id, str): raise TypeError("Coupon ID Must be a string")
-        for coupon in self.__coupon_list:
-            if coupon.id == id:
-                return coupon
-        return None
-
-    def remove_coupon_by_id(self, coupon_id: str):
-        if not isinstance(id, str): raise TypeError("Coupon ID Must be a string")
-        coupon = self.search_coupon_by_id(coupon_id)
-        self.__coupon_list.remove(coupon)
 
     def search_booking_by_id(self, id: str):
         if not isinstance(id, str): raise TypeError("Booking ID must be a string")
@@ -354,13 +340,6 @@ class Customer:
         booking = self.search_booking_by_id(booking_id)
         if not booking: raise ValueError(f"Booking ID {booking_id} not found")
         booking.treatment_list.append(treatment_transaction)
-
-    def get_active_booking(self):
-        active_booking_list = []
-        for booking in self.__booking_list:
-            if booking.status == "Waiting deposit" or booking.status == "Confirmed":
-                active_booking_list.append(booking)
-        return active_booking_list
 
 class Bronze(Customer):
     def __init__(self, id: str, name: str):
@@ -497,8 +476,6 @@ class AddOn:
     def price(self): return self.__price
     @property
     def amount(self): return self.__amount
-    @property
-    def name(self): return self.__name
 
     def reduce_amount(self, value: int):
         if not isinstance(value, int): raise TypeError("Reduction value must be an integer")
@@ -643,11 +620,7 @@ class Administrative(Admin):
             for booking in customer.booking_list:
                 if len(booking.treatment_list) > 0 and booking.treatment_list[0].date == date_target and booking.status == "Completed":
                     booking_count += 1
-                    if booking.coupon_used_record is not None:
-                        coupon_used = booking.coupon_used_record.id
-                    else:
-                        coupon_used = "None"
-                    total_sum += booking.calculate_total(coupon_used)
+                    total_sum += booking.calculate_total()
                     for transaction in booking.treatment_list:
                         for resource in treatment_count:
                             if resource.resource.id == transaction.treatment.id:
@@ -708,14 +681,14 @@ class Cash(Payment):
             raise TypeError("Deposit and money must be numbers")
         if money < 0: raise ValueError("Money cannot be negative")
         if money < deposit: return f"You have to pay {deposit} ฿ for deposit⚠️"
-        return f"Your booking confirmed✅, Paid deposit {deposit} ฿ Your change = {money - deposit} ฿"
+        return "Your booking confirmed✅"
 
     def pay_expenses(self, total: float, money: float):
         if not isinstance(total, (int, float)) or not isinstance(money, (int, float)):
             raise TypeError("Total and money must be numbers")
         if money < 0: raise ValueError("Money cannot be negative")
         if money < total: return f"Not enough money! You have to pay {total} ฿⚠️"
-        return f"Payment Success✅, Paid expenses {total} ฿ Your change = {money - total} ฿"
+        return f"Payment Success✅, Your change = {money - total} ฿"
 
 class Card(Payment):
     def pay_deposit(self, deposit: float, number: str):
@@ -741,7 +714,6 @@ class Booking:
         self.__customer = customer
         self.__date = date_target
         self.__treatment_list = []
-        self.__coupon_used_record = None
         self.__status = "Waiting deposit"
 
     @property
@@ -752,25 +724,13 @@ class Booking:
     def date(self): return self.__date
     @property
     def status(self): return self.__status
-    @property
-    def coupon_used_record(self): return self.__coupon_used_record
 
     @status.setter
     def status(self, value: str):
         if not isinstance(value, str): raise TypeError("Status must be a string")
         self.__status = value
 
-    def calculate_total(self, coupon_id: str):
-        if coupon_id != "None":
-            coupon = self.__customer.search_coupon_by_id(coupon_id)
-            if coupon is None:
-                return False
-            self.__coupon_used_record = coupon
-            coupon_discount = coupon.discount
-        else:
-            coupon_discount = 0
-            coupon = None
-
+    def calculate_total(self):
         total = 0.0
         for transaction in self.treatment_list:
             total += transaction.treatment.price
@@ -780,11 +740,6 @@ class Booking:
 
         discount = total * self.__customer.discount
         total -= discount
-        total -= coupon_discount
-
-        if coupon is not None:
-            self.__customer.remove_coupon_by_id(coupon_id)
-        
         return max(0, total) 
 
     def pay_expenses(self, payment: Payment, total: float, **kwargs):
@@ -804,11 +759,8 @@ class Booking:
     def cancle(self):
         for transaction in self.__treatment_list:
             transaction.cancle()
-        self.__status = "Cancelled"
+        self.__status = "CANCEL"
         return "Cancel Success✅"
-
-    def check_in(self):
-        self.__status = "Checked-In"
 
 class Therapist(Employee):
     def __init__(self, id: str, name: str, skill: SkillSets):
@@ -905,13 +857,17 @@ def init_system():
   # Create Operation Officer //
   reg1 = RegistrationOfficer(id="0001", name="Kevin", spa=spa, password="12345")
   ad1 = Administrative(id="0002", name="Paul", spa=spa, password="12345")
+  web_officer = RegistrationOfficer(id="WEB0001", name="Max", spa=spa, password="12345")
 
   # Add themselves //
   reg1.add_employee(reg1)
   reg1.add_employee(ad1)  
+  reg1.add_employee(web_officer)  
+  
 
   # Login //
   spa.verify_admin(reg1.id, "12345")
+  spa.verify_admin(web_officer.id, "12345")
   
   # Add service //
   reg1.add_treatment(massage1)
@@ -995,130 +951,6 @@ spa = init_system()
 # 3. API ROUTES & PYDANTIC VALIDATION (OUTER LAYER)
 # ==========================================
 
-class RequestEnrollCustomer(BaseModel):
-    customer_name: str
-    member_type: str
-
-class ResponseEnrollCustomer(BaseModel):
-    status: str
-    customer_id: str
-    member_type: str              
-    message: str
-
-@app.post("/enrollCustomer", response_model=ResponseEnrollCustomer)
-def enroll_customer(req: RequestEnrollCustomer):
-    try:
-        # 1. ค้นหาเจ้าหน้าที่ลงทะเบียน (Registration Officer) แบบอัตโนมัติ
-        # (เนื่องจากลูกค้าไม่ได้กรอกมา ระบบจะสุ่มหาพนักงานที่มีตำแหน่งนี้มารับเรื่องให้เอง)
-        officer = None
-        for emp in spa.employee_list:
-            if isinstance(emp, RegistrationOfficer):
-                officer = emp
-                break
-                
-        if officer is None:
-            raise Exception("No Registration Officer available in the system")
-
-        # 2. ให้ระบบเจนรหัสลูกค้าให้ใหม่ โดยใช้ฟังก์ชันที่เราสร้างไว้
-        new_customer_id = spa.generate_unique_customer_id()
-
-        # 3. เช็คประเภทสมาชิกและสร้างออบเจกต์ Customer (ใช้รหัสใหม่ที่เพิ่งเจน)
-        member_type_clean = req.member_type.strip().lower()
-
-        if member_type_clean == "bronze":
-            customer = Bronze(new_customer_id, req.customer_name)
-        elif member_type_clean == "silver":
-            customer = Silver(new_customer_id, req.customer_name)
-        elif member_type_clean == "gold":
-            customer = Gold(new_customer_id, req.customer_name)
-        elif member_type_clean == "platinum":
-            customer = Platinum(new_customer_id, req.customer_name)
-        else:
-            raise Exception("Invalid member type")
-
-        # 4. ให้เจ้าหน้าที่ทำการบันทึกลูกค้าเข้าระบบ Spa
-        # (ในฟังก์ชัน add_customer มีระบบเซฟตี้อีกชั้น ถ้า id ซ้ำมันจะเด้ง ValueError)
-        officer.add_customer(customer)
-
-        # 5. ส่งผลลัพธ์ตอบกลับ พร้อมโชว์รหัสใหม่ที่ลูกค้าได้รับ
-        return ResponseEnrollCustomer(
-            status="SUCCESS",
-            customer_id=customer.id,
-            member_type=req.member_type,
-            message="Enroll success✅"
-        )
-
-    except Exception as e:
-        # กรณีมี Error (เช่น พิมพ์ member_type มาผิด)
-        return ResponseEnrollCustomer(
-            status="FAILED",
-            customer_id="",
-            member_type=req.member_type,
-            message=str(e)
-        )
-
-treatment_dict = {
-  "Traditional Thai Massage" : ["TM-01", "TM-02", "TM-03"],
-  "Aroma Therapy" : ["AT-02"],
-  "Deep Tissue Massage" : ["DT-03"],
-  "Hydrotherapy Pool" : ["HP-04"],
-}
-
-class RequestViewTreatmentList(BaseModel):
-    customer_id: str
-
-class ResponseTreatment(BaseModel):
-    id: str
-    name: str
-    duration: int
-    price: float
-
-@app.post("/requstViewTreatmentList", response_model=list[ResponseTreatment])
-def request_to_view_treatment_list(req: RequestViewTreatmentList):
-    customer = spa.search_customer_by_id(req.customer_id)
-    if customer == None:
-        raise HTTPException(status_code=401, detail="Customer is not regitered")
-    temp_treatment_list = []
-    for treatment in spa.treatment_list:
-        show_treatment = ResponseTreatment(
-            id=treatment.id, 
-            name=treatment.name,
-            duration=treatment.duration, 
-            price=treatment.price
-        )
-        temp_treatment_list.append(show_treatment)
-    return temp_treatment_list
-
-class RequestViewTherapistByTreatment(BaseModel):
-    customer_id: str
-    treatment_id: str
-
-class ResponseTherapistFromSearch(BaseModel):
-    therapist_id: str
-    name: str
-    skill: str
-
-@app.post("/requestViewTherapistByTreatment", response_model=list[ResponseTherapistFromSearch])
-def request_view_therapist_by_treatment(req: RequestViewTherapistByTreatment):
-    customer = spa.search_customer_by_id(req.customer_id)
-    treatment = spa.search_treatment_by_id(req.treatment_id)
-    if customer is None:
-        raise HTTPException(status_code=403, detail="Customer is not registered")
-    if treatment is None:
-        raise HTTPException(status_code=402, detail="Treatment Not Found")
-    temp_therapist_list = []
-    for employee in spa.employee_list:
-        if isinstance(employee, Therapist):
-            if treatment.id in treatment_dict.get(employee.skill.value, []):
-                therapist = ResponseTherapistFromSearch(
-                    therapist_id=employee.id,
-                    name=employee.name,
-                    skill=employee.skill.value
-                )
-                temp_therapist_list.append(therapist)
-    return temp_therapist_list
-
-    
 class RequestGetSlot(BaseModel):
     customer_id: str = Field(..., min_length=1)
     therapist_id: str = Field(..., min_length=1)
@@ -1144,7 +976,13 @@ time = {
   13: "14:00-14:30", 14: "14:30-15:00", 15: "15:00-15:30", 16: "15:30-16:00",
 }
 
-@mcp.tool
+treatment_dict = {
+  "Traditional Thai Massage" : ["TM-01", "TM-02", "TM-03"],
+  "Aroma Therapy" : ["AT-02"],
+  "Deep Tissue Massage" : ["DT-03"],
+  "Hydrotherapy Pool" : ["HP-04"],
+}
+
 @app.post("/getSlot", response_model=list[ResponseGetSlot])
 def find_free_slot(req: RequestGetSlot):
     try:
@@ -1191,8 +1029,7 @@ def find_free_slot(req: RequestGetSlot):
 class RequestCancleBooking(BaseModel):
     booking_id: str = Field(..., min_length=1)
     customer_id: str = Field(..., min_length=1)
-
-@mcp.tool
+  
 @app.post("/cancelBooking", response_model=str)
 def cancel_booking(req: RequestCancleBooking):
     customer = spa.search_customer_by_id(req.customer_id)
@@ -1253,9 +1090,9 @@ def is_continuous(numbers):
 
     return True
 
+
 @app.post("/requestBooking", response_model=ResponseRequestBooking)
 def request_booking(req: RequestBooking):
-
     try:
         date_booking = date(req.year, req.month, req.day)
     except ValueError:
@@ -1281,7 +1118,7 @@ def request_booking(req: RequestBooking):
 
         therapist = spa.search_employee_by_id(treat.therapist_id)
         if not therapist: raise HTTPException(status_code=404, detail=f"Therapist {treat.therapist_id} not found")
- 
+
         addon_list = []
        
         addon_list_enough = []
@@ -1327,119 +1164,48 @@ def request_booking(req: RequestBooking):
 
     return ResponseRequestBooking(status="SUCCESS", booking_id=booking_id)
 
-class RequestCheckBooking(BaseModel):
-    customer_id: str
+# print(find_free_slot(RequestGetSlot(customer_id = "C0001", therapist_id = "T0001", treatment_id = "TM-01", room_type = "SH", year = 2026, month = 1, day = 10)))
 
+# request_data = Request_booking(
+#     customer_id="C0001",
+#     year=2026,
+#     month=1,
+#     day=10,
+#     treatments=[
+#         RequestTreatment(
+#             therapist_id="T0001",  
+#             treatment_id="TM-01",
+#             room_id="ROOM-DRY-SH-001",
+#             time="8:00-8:30",
+#             addon=["OIL-P", "CMP-H"]
+#         )
+#     ]
+# )
 
-class ResponseTherapist(BaseModel):
-    therapist_id: str
-    name: str
+# print(request_booking(request_data))
 
-class ResponseTreatmentTransaction(BaseModel):
-    id: str
-    name: str
-    room: str
-    time: str
-    addon_list: list[str]
-    therapist: ResponseTherapist
+# print(find_free_slot(RequestGetSlot(customer_id = "C0001", therapist_id = "T0001", treatment_id = "TM-01", room_type = "SH", year = 2026, month = 1, day = 10)))
 
-class ResponseBooking(BaseModel):
-    booking_id: str
-    booking_date: date
-    booking_status: str
-    treatment_list: list[ResponseTreatmentTransaction]
-
-def make_time_index_to_str(slot_list):
-    time_start = time[slot_list[0]].split("-")[0]
-    time_end = time[slot_list[-1]].split("-")[-1]
-    return (time_start, time_end)
-
-@app.post("/requestToCheckBooking",response_model=list[ResponseBooking])
-def request_to_check_booking(req: RequestCheckBooking):
-    customer = spa.search_customer_by_id(req.customer_id)
-    if customer is None:
-        raise HTTPException(status_code=403, detail="Customer is not registered")
-    active_booking = customer.get_active_booking()
-    temp_booking_list = []
-    for booking in active_booking:
-        temp_treatment_list = []
-        for treatment_transaction in booking.treatment_list:
-            time_start, time_end = make_time_index_to_str(treatment_transaction.time_slot)
-            treatment = ResponseTreatmentTransaction(
-                id=treatment_transaction.treatment.id, 
-                name=treatment_transaction.treatment.name,
-                room=treatment_transaction.room.id,
-                time=f"{time_start}-{time_end}",
-                addon_list=[addon.name for addon in treatment_transaction.add_on_list],
-                therapist=ResponseTherapist(therapist_id=treatment_transaction.therapist.id, name=treatment_transaction.therapist.name)
-            )
-            temp_treatment_list.append(treatment)
-        res_booking = ResponseBooking(
-            booking_id=booking.id,
-            booking_date=booking.treatment_list[0].date,
-            booking_status=booking.status,
-            treatment_list=temp_treatment_list
-        )
-        temp_booking_list.append(res_booking)
-    return temp_booking_list
-
-class RequestToCheckIn(BaseModel):
-    customer_id: str
-    booking_id: str
-
-@app.post("/requestToCheckIn",response_model=str)
-def request_to_check_in(req: RequestToCheckIn):
-    customer = spa.search_customer_by_id(req.customer_id)
-    if customer is None:
-        raise HTTPException(status_code=403, detail="Customer is not registered")
-    booking = customer.search_booking_by_id(req.booking_id)
-    if booking.status != "Confirmed":
-        return "Deposit not paid⚠️"
-    booking.check_in()
-    return "Checked-In Success✅"
 
 class RequestToPay(BaseModel):
   customer_id:str
   booking_id:str
   payment_type:str
   payment_value:int
-  coupon_id: str
-
-@app.post("/requestToPayExpenses",response_model=str)
-def request_to_pay_expenses(req :RequestToPay):
-    customer = spa.search_customer_by_id(req.customer_id)
-    if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found")
-        
-    booking = customer.search_booking_by_id(req.booking_id)
-    if not booking:
-        raise HTTPException(status_code=404, detail="Booking not found")
-
-    total = booking.calculate_total(req.coupon_id)
-    if total is False:
-        raise HTTPException(status_code=400, detail="Not found coupon⚠️")
-
-    if req.payment_type == "Cash":
-        cash = Cash()
-        return booking.pay_expenses(cash, total, money=req.payment_value) 
-    elif req.payment_type == "Card":
-        card = Card()
-        return booking.pay_expenses(card, total, number=str(req.payment_value))
-
-    raise HTTPException(status_code=400, detail="Invalid payment type")      
-
-@app.post("/requestToPayDeposit",response_model=str)
-def request_to_pay_expenses(req :RequestToPay):
+@app.post("/requestToPay",response_model=str)
+def request_to_pay(req :RequestToPay):
     customer = spa.search_customer_by_id(req.customer_id)
     booking = customer.search_booking_by_id(req.booking_id)
-    total = 1000 #ค่ามัดจำ = 1000 บาท
+    total = booking.calculate_total()
     
     if req.payment_type == "Cash":
       cash = Cash()
-      return booking.pay_deposit(cash, total, money=req.payment_value) 
+      return booking.pay_expenses(cash, total, money=req.payment_value) 
     elif req.payment_type == "Card":
       card = Card()
-      return booking.pay_deposit(card, total, number=str(req.payment_value))
+      return booking.pay_expenses(card, total, number=req.payment_value)
+
+
 
 class RequestToCalculateRevenuePerDay(BaseModel):
    admin_id:str
@@ -1454,28 +1220,30 @@ class ResponseTreatmentUsage(BaseModel):
   count:int
 class ResponseReportPerDay(BaseModel):
   day:int
-  month:int
   year:int
+  month:int
   total:float
   addon_list_count:list[ResponseAddOnUsage]
   treatment_list_count:list[ResponseTreatmentUsage]
-
 @app.post("/requestToCalculateRevenuePerDay",response_model=ResponseReportPerDay)
 def request_to_calculate_revenue_per_day(req :RequestToCalculateRevenuePerDay):
   # PART 1 -> GET DATE(WORK ACCORDING TO SEQUENCE)
   date_to_cal = date(req.year, req.month, req.day)
   admin = spa.search_employee_by_id(req.admin_id)
   report = admin.calculate_revenue_per_day(date_to_cal)
-  
+
   # PART 2 -> PARSE INTO JSON
   result = ResponseReportPerDay(day=report.date.day,
-                                month=report.date.month,
-                                year=report.date.year,
-                                total=report.total,
-                                addon_list_count=[ResponseAddOnUsage(addon_id=addon.resource.id,count=addon.count) for addon in report.addon_count],
-                                treatment_list_count=[ResponseTreatmentUsage(treatment_id=addon.resource.id,count=addon.count) for addon in report.treatment_count]
-                                )
+                                   month=report.date.month,
+                                   year=report.date.year,
+                                   total=report.total,
+                                   addon_list_count=[ResponseAddOnUsage(addon_id=addon.resource.id,count=addon.count) for addon in report.addon_count],
+                                   treatment_list_count=[ResponseTreatmentUsage(treatment_id=addon.resource.id,count=addon.count) for addon in report.treatment_count]
+                                   )
   return result
+
+
+
 
 class ResponseEmployeeSlot(BaseModel):
     time:str
@@ -1492,7 +1260,6 @@ class Request_employee_schedule(BaseModel):
   year:int
   month:int
   day:int
-  
 @app.post("/requestEmployeeSchedule",response_model=ResponseEmployeeSchedule)
 def request_employee_schedule(req :Request_employee_schedule):
   # PART 1 -> GET DATE(WORK ACCORDING TO SEQUENCE)
@@ -1509,6 +1276,9 @@ def request_employee_schedule(req :Request_employee_schedule):
     sub_result.append(ResponseEmployeeSlot(time=time[slot.slot_order],room_id=slot.treatment_transaction[0].room.id,treatment_id=slot.treatment_transaction[0].treatment.id,customer_id=slot.treatment_transaction[0].customer.id))
   result = ResponseEmployeeSchedule(year=req.year,month=req.month,day=req.day,slot=sub_result)
   return result 
+
+
+
 
 class ResponseRoomDetail(BaseModel):
   customer_id:str
@@ -1527,7 +1297,6 @@ class RequestRoomSchedule(BaseModel):
   year:int
   month:int
   day:int
-  
 @app.post("/requestRoomSchedule",response_model=ResponseRoomSchedule)
 def request_room_schedule(req :RequestRoomSchedule):
   # PART 1 -> GET DATE(WORK ACCORDING TO SEQUENCE)
@@ -1547,3 +1316,42 @@ def request_room_schedule(req :RequestRoomSchedule):
 
 if __name__ == "__main__":
     uvicorn.run("spa:app", host="127.0.0.1", port=8000, log_level="info")
+
+
+
+
+class RequestEnrollCustomer(BaseModel):
+    customer_name: str
+    member_type: str
+
+class ResponseEnrollCustomer(BaseModel):
+    status: str
+    customer_id: str
+    member_type: str              
+    message: str
+
+
+# API ENDPOINT
+@app.post("/enrollCustomer", response_model=ResponseEnrollCustomer)
+def enroll_customer(req: RequestEnrollCustomer):
+    try:
+        # 1. ไปตามหา Max (WEB0001)
+        officer = spa.search_employee_by_id("WEB0001")
+        
+        # 2. มอบหมายงานให้ Max จัดการทั้งหมด
+        customer = officer.enroll_new_customer(req.customer_name, req.member_type)
+
+        return ResponseEnrollCustomer(
+            status="SUCCESS",
+            customer_id=customer.id,
+            member_type=req.member_type,
+            message=f"Registered by {officer.name}"
+        )
+
+    except Exception as e: 
+        return ResponseEnrollCustomer(
+            status="FAILED",
+            customer_id="",
+            member_type=req.member_type,
+            message=str(e)
+        )
