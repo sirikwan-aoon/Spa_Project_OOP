@@ -1348,10 +1348,10 @@ def enroll_customer(req: RequestEnrollCustomer):
             message=f"Registered by {officer.name}"
         )
 
-    except Exception as e: 
+    except: 
         return ResponseEnrollCustomer(
             status="FAILED",
             customer_id="",
             member_type=req.member_type,
-            message=str(e)
+            message="Registration failed. Please check your data or contact admin."
         )
