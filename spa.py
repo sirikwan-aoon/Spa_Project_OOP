@@ -149,6 +149,21 @@ class Spa:
             
             if self.search_customer_by_id(new_id) is None:
                 return new_id
+
+    def create_booking_id(self,d :date):
+        return f'BK-{d.year}{d.month if len(str(d.month)) > 1 else f"0{d.month}"}{d.day if len(str(d.day)) > 1 else f"0{d.day}"}-{spa.booking_count}'
+
+    def generate_customer_id(self) :
+        
+        current_count = len(self.customer_list)
+        
+        while True:
+            current_count += 1
+            new_id = f"C{current_count:04d}"
+            
+            if self.search_customer_by_id(new_id) is None:
+                return new_id
+
 class Employee:
     def __init__(self, id: str, name: str):
         if not isinstance(id, str) or not isinstance(name, str):
@@ -183,6 +198,10 @@ class Employee:
         for slot_ in slot_list:
             if slot_.slot_order == time:
                 slot_.vacancy += 1
+
+    def add_treatment_trasaction_at_date_time(self,treatment:TreatmentTransaction,date:date,time:int):
+        slot = self.get_slot_by_date_time(date,time)
+        slot.add_treatment_transaction(treatment)
 
 class Admin(Employee):
     def __init__(self, id: str, name: str, spa: Spa, password: str):
@@ -257,6 +276,27 @@ class RegistrationOfficer(Admin):
         if not isinstance(treatment, Treatment): raise TypeError("Must be a Treatment object")
         if not self.login: raise PermissionError("Officer must login first")
         self.spa.add_treatment(treatment)
+
+    def enroll_new_customer(self, name, member_type):
+        
+        new_customer_id = self.spa.generate_customer_id()
+
+        m_type = member_type.strip().lower()
+
+        if m_type == "bronze":
+           customer = Bronze(new_customer_id, name)
+        elif m_type == "silver":
+           customer = Silver(new_customer_id, name)
+        elif m_type == "gold":
+           customer = Gold(new_customer_id, name)
+        elif m_type == "platinum":
+           customer = Platinum(new_customer_id, name)
+        else:
+            raise Exception("Invalid member type")
+        
+        self.add_customer(customer)
+
+        return customer
 
 class Message:
     def __init__(self, id: str, receiver, text: str, date_received: datetime):
@@ -339,12 +379,7 @@ class Customer:
             if booking.id == id: return booking
         return None
 
-    def book(self, id: str, customer_id: str, date_booking: date):
-        if not isinstance(id, str) or not isinstance(customer_id, str): raise TypeError("IDs must be strings")
-        if not isinstance(date_booking, date): raise TypeError("Must be a date object")
-        if len(self.__booking_list) >= self.booking_quota:
-            raise ValueError("Booking quota exceeded for this customer")
-        booking = Booking(id, self, date_booking)
+    def book(self,booking:Booking):
         self.__booking_list.append(booking)
   
     def add_treatment_transaction(self, booking_id: str, treatment_transaction):
@@ -511,6 +546,9 @@ class AddOn:
         if not isinstance(value, int): raise TypeError("Reduction value must be an integer")
         if value < 0: raise ValueError("Reduction value cannot be negative")
         self.__amount += value
+    
+    def is_ava(self):
+        return self.__amount > 0
 
 class Room:
     def __init__(self, id: str):
@@ -548,6 +586,10 @@ class Room:
         for slot_ in slot_list:
             if slot_.slot_order == time_order:
                 slot_.vacancy = 1
+        
+    def add_treatment_trasaction_at_date_time(self,treatment:TreatmentTransaction,date:date,time:int):
+        slot = self.get_slot_by_date_time(date,time)
+        slot.add_treatment_transaction(treatment)
 
 class DryPrivateRoom(Room):
     def __init__(self, id: str, price: float):
@@ -626,6 +668,9 @@ class Slot:
         if transaction in self.__treatment_transaction:
             self.__treatment_transaction.remove(transaction)
             self.__vacancy += 1
+
+    def is_ava(self):
+        return self.__vacancy > 0
   
 class Administrative(Admin):
     def create_resource_count_class(self):
@@ -731,7 +776,7 @@ class Card(Payment):
         return f"Payment Success✅, {total} ฿ deducted from your card (Card id : {number})"
 
 class Booking:
-    def __init__(self, id: str, customer: Customer, date_target: date):
+    def __init__(self, id: str, customer: Customer, date_target: date,treat_list:list[TreatmentTransaction]):
         if not isinstance(id, str): raise TypeError("Booking ID must be a string")
         if not isinstance(customer, Customer): raise TypeError("Must be a Customer object")
         if not isinstance(date_target, date): raise TypeError("Must be a date object")
@@ -740,7 +785,7 @@ class Booking:
         self.__id = id
         self.__customer = customer
         self.__date = date_target
-        self.__treatment_list = []
+        self.__treatment_list = treat_list
         self.__coupon_used_record = None
         self.__status = "Waiting deposit"
 
@@ -905,13 +950,16 @@ def init_system():
   # Create Operation Officer //
   reg1 = RegistrationOfficer(id="0001", name="Kevin", spa=spa, password="12345")
   ad1 = Administrative(id="0002", name="Paul", spa=spa, password="12345")
+  web_officer = RegistrationOfficer(id="WEB0001", name="WEB SERVICE", spa=spa, password="12345")
 
   # Add themselves //
   reg1.add_employee(reg1)
   reg1.add_employee(ad1)  
+  reg1.add_employee(web_officer)
 
   # Login //
   spa.verify_admin(reg1.id, "12345")
+  spa.verify_admin(web_officer.id, "12345")
   
   # Add service //
   reg1.add_treatment(massage1)
@@ -934,7 +982,7 @@ def init_system():
   reg1.add_customer(c10)
 
   # Add employee //
-  end_date_month = date(2026, 2, 28)
+  end_date_month = date(2026, 1, 31)
 
   reg1.add_employee(t1)
   reg1.add_slot(end_date_month, t1, 1)
@@ -1137,7 +1185,7 @@ class ResponseGetSlot(BaseModel):
     day: int
     slot: list[ResponseSlot]
 
-time = {
+time_dict = {
   1: "8:00-8:30", 2: "8:30-9:00", 3: "9:00-9:30", 4: "9:30-10:00",
   5: "10:00-10:30", 6: "10:30-11:00", 7: "11:00-11:30", 8: "11:30-12:00",
   9: "12:00-12:30", 10: "12:30-13:00", 11: "13:00-13:30", 12: "13:30-14:00",
@@ -1218,9 +1266,18 @@ class RequestBooking(BaseModel):
     day: int = Field(..., ge=1, le=31)
     treatments: list[RequestTreatment]
 
+class ErrorMessage(BaseModel):
+    error_code:str
+    error_message:str
+
+class ResponseTreatmentError(BaseModel):
+    treatment_id:str
+    error:list[ErrorMessage]
+
 class ResponseRequestBooking(BaseModel):
     status: str
     booking_id: str
+    detail:list[ResponseTreatmentError]
 
 def change_str_to_index_list(str_time):
     result = []
@@ -1229,7 +1286,7 @@ def change_str_to_index_list(str_time):
         start_time, end_time = str_time.split("-")
     except ValueError:
         return [] 
-    for key, value in time.items():
+    for key, value in time_dict.items():
         start, end = value.split("-")
         if start_time == start:
             result.append(key)
@@ -1255,77 +1312,79 @@ def is_continuous(numbers):
 
 @app.post("/requestBooking", response_model=ResponseRequestBooking)
 def request_booking(req: RequestBooking):
-
-    try:
-        date_booking = date(req.year, req.month, req.day)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format")
-
+    treatment_error_list = []
+    treatment_transaction_list  = []
     customer = spa.search_customer_by_id(req.customer_id)
-    if not customer: raise HTTPException(status_code=404, detail="Customer not found")
-
-    if customer.booking_quota <= len(customer.booking_list) or customer.missed_count > 2:
-        raise HTTPException(status_code=400, detail="CANNOT MAKE BOOKING: Quota exceeded or missed too many")
-
-    d = date.today()
-    booking_id = f'BK-{d.year}{d.month if len(str(d.month)) > 1 else f"0{d.month}"}{d.day if len(str(d.day)) > 1 else f"0{d.day}"}-{spa.booking_count}'
-
-    customer.book(booking_id, customer.id, d)
+    d = date(req.year,req.month,req.day)
+    if customer is None:
+          return ErrorMessage(error_code="CUSTOMER_NOT_FOUND",error_message=f"{req.customer_id} is not exist")
 
     for treat in req.treatments:
-        treatment = spa.search_treatment_by_id(treat.treatment_id)
-        if not treatment: raise HTTPException(status_code=404, detail=f"Treatment {treat.treatment_id} not found")
+      error_list = []
+      room = spa.search_room_by_id(treat.room_id)
+      if room is None:
+          error_list.append(ErrorMessage(error_code="ROOM_NOT_FOUND",error_message=f"{treat.room_id} is not exist"))
 
-        room = spa.search_room_by_id(treat.room_id)
-        if not room: raise HTTPException(status_code=404, detail=f"Room {treat.room_id} not found")
+      therapist = spa.search_employee_by_id(treat.therapist_id)
+      if therapist is None:
+          error_list.append(ErrorMessage(error_code="EMPLOYEE_NOT_FOUND",error_message=f"{treat.therapist_id} is not exist"))
 
-        therapist = spa.search_employee_by_id(treat.therapist_id)
-        if not therapist: raise HTTPException(status_code=404, detail=f"Therapist {treat.therapist_id} not found")
- 
+      treatment = spa.search_treatment_by_id(treat.treatment_id)
+      if treatment is None:
+          error_list.append(ErrorMessage(error_code="TREATMENT_NOT_FOUND",error_message=f"{treat.treatment_id} is not exist"))
+
+      if room is None or therapist is None or treatment is None:
+        treatment_error_list.append(ResponseTreatmentError(treatment_id=treat.treatment_id,
+                                                            error=error_list))
+      else:
+        slots = change_str_to_index_list(treat.time)
+        if not slots: error_list.append(ErrorMessage(error_code="TIME_WRONG_FORMAT",error_message=f"this '{treat.time}' is not valid"))
+        if slots and len(slots)*30 != treatment.duration : error_list.append(ErrorMessage(error_code="TIME_WRONG_FORMAT",error_message=f"Time must be exactly {treatment.duration} minutes."))
+
+        time_not_ava = []
+        for time_slot in slots:
+            room_slot = room.get_slot_by_date_time(d,time_slot)
+            if  not room_slot.is_ava():
+              error_list.append(ErrorMessage(error_code="ROOM_NOT_AVAILABLE",error_message=f"{room.id} is not available at {time_dict[time_slot]}"))
+            therapist_slot = therapist.get_slot_by_date_time(d,time_slot)
+            if  not therapist_slot.is_ava():
+               error_list.append(ErrorMessage(error_code="EMPLOYEE_NOT_AVAILABLE",error_message=f"{therapist.id} is not available at {time_dict[time_slot]}"))
+    
         addon_list = []
-       
-        addon_list_enough = []
-        addon_list_not_enough = []
         for id in treat.addon:
             addon = spa.search_add_on_by_id(id)
-            if addon.amount < 1:
-                addon_list_not_enough.append(addon)
+            if addon is None:
+                error_list.append(ErrorMessage(error_code="ADDON_NOT_FOUND",error_message=f"{id} is not exist"))
             else:
-                addon_list_enough.append(addon)
+                if not addon.is_ava() :
+                    error_list.append(ErrorMessage(error_code="ADDON_NOT_AVAILABLE",error_message=f"{id} is run out of stock"))
+                else:
+                    addon_list.append(addon)
+            
+        if  len(error_list) == 0:
+            treatment_transaction_list.append(TreatmentTransaction(customer, treatment, d, room, slots, therapist, addon_list))
+        else:
+            treatment_error_list.append(ResponseTreatmentError(treatment_id=treat.treatment_id,
+                                                    error=error_list))
 
-        if len(addon_list_not_enough) >= 1: raise HTTPException(status_code=404, detail=f"{', '.join(str(addon.id) for addon in addon_list_not_enough)} was not enough")
+    if len(treatment_error_list) != 0:
+        return  ResponseRequestBooking(status="FAIL",booking_id="",detail=treatment_error_list)
+  
+    booking_id = spa.create_booking_id(d)
+    for treat in treatment_transaction_list:
+      room = treat.room
+      therapist = treat.therapist
+      for time in treat.time_slot:
+        room.add_treatment_trasaction_at_date_time(treat,d,time)
+        therapist.add_treatment_trasaction_at_date_time(treat,d,time)
+      addon_list = treat.add_on_list
+      for addon in addon_list:
+        addon.reduce_amount(1)
+    booking = Booking(booking_id,customer,d,treatment_transaction_list)
+    customer.book(booking)
 
-        for id in treat.addon:
-            addon = spa.search_add_on_by_id(id)
-            if not addon: raise HTTPException(status_code=404, detail=f"Add-on {id} not found")
-            addon.reduce_amount(1)
-            addon_list.append(addon)
 
-        slot = change_str_to_index_list(treat.time)
-        if not slot: raise HTTPException(status_code=400, detail="Invalid time format")
-        if not is_continuous(slot): raise HTTPException(status_code=404, detail=f"Invalid, Time must be continuous")
-        if len(slot)*30 != treatment.duration : raise HTTPException(status_code=400, detail=f"Time must be exactly {treatment.duration} minutes.")
-
-        treatment_transaction = TreatmentTransaction(customer, treatment, date_booking, room, slot, therapist, addon_list)
-        customer.add_treatment_transaction(booking_id, treatment_transaction)
-        
-        room_slot = room.get_slot_by_date(date_booking)
-        therapist_slot = therapist.get_slot_by_date(date_booking)
-
-        try:
-            for order in slot:
-                for slot_ in room_slot:
-                    if slot_.slot_order == order:
-                        slot_.add_treatment_transaction(treatment_transaction)
-                for slot_ in therapist_slot:
-                    if slot_.slot_order == order:
-                        slot_.add_treatment_transaction(treatment_transaction)
-        except (ValueError, TypeError) as e:
-            raise HTTPException(status_code=400, detail=str(e)) 
-
-    spa.booking_count += 1
-
-    return ResponseRequestBooking(status="SUCCESS", booking_id=booking_id)
+    return ResponseRequestBooking(status="SUCCESS",booking_id=booking_id,detail=[])
 
 class RequestCheckBooking(BaseModel):
     customer_id: str
@@ -1544,6 +1603,44 @@ def request_room_schedule(req :RequestRoomSchedule):
    sub_result.append(ResponseRoomSlot(time=time[slot.slot_order],detail=sub_sub_result))
   result = ResponseRoomSchedule(year=req.year,month=req.month,day=req.day,slot=sub_result)
   return result 
+
+
+class RequestEnrollCustomer(BaseModel):
+    customer_name: str
+    member_type: str
+
+class ResponseEnrollCustomer(BaseModel):
+    status: str
+    customer_id: str
+    member_type: str              
+    message: str
+
+
+# API ENDPOINT
+@app.post("/enrollCustomer", response_model=ResponseEnrollCustomer)
+def enroll_customer(req: RequestEnrollCustomer):
+    try:
+        officer = spa.search_employee_by_id("WEB0001")
+        
+        if not officer:
+            raise Exception("Registration Officer not found.")
+
+        customer = officer.enroll_new_customer(req.customer_name, req.member_type)
+
+        return ResponseEnrollCustomer(
+            status="SUCCESS",
+            customer_id=customer.id,
+            member_type=req.member_type,
+            message=f"Registered by {officer.name}"
+        )
+    except Exception as e: 
+        return ResponseEnrollCustomer(
+            status="FAILED",
+            customer_id="",
+            member_type=req.member_type,
+            message=str(e)
+        )
+
 
 if __name__ == "__main__":
     uvicorn.run("spa:app", host="127.0.0.1", port=8000, log_level="info")
