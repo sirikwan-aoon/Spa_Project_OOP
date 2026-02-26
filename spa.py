@@ -149,17 +149,6 @@ class Spa:
     def create_booking_id(self,d :date):
         return f'BK-{d.year}{d.month if len(str(d.month)) > 1 else f"0{d.month}"}{d.day if len(str(d.day)) > 1 else f"0{d.day}"}-{spa.booking_count}'
 
-    def generate_customer_id(self) :
-        
-        current_count = len(self.customer_list)
-        
-        while True:
-            current_count += 1
-            new_id = f"C{current_count:04d}"
-            
-            if self.search_customer_by_id(new_id) is None:
-                return new_id
-
 class Employee:
     def __init__(self, id: str, name: str):
         if not isinstance(id, str) or not isinstance(name, str):
