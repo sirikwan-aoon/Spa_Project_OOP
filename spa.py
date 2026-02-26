@@ -306,6 +306,16 @@ class Message:
 
     @property
     def text(self): return self.__text
+    @property
+    def date(self): return self.__date
+    @property
+    def status(self): return self.__status
+    @property
+    def id(self): return self.__id
+
+    @status.setter
+    def status(self, value):
+        self.__status = value
 
 class Customer:
     def __init__(self, id: str, name: str):
@@ -392,6 +402,20 @@ class Customer:
             if booking.status == "Completed" or booking.status == "Cancelled":
                 completed_booking_list.append(booking)
         return completed_booking_list
+
+    def check_notice(self):
+        unread_notice = []
+        for notice in self.__notice_list:
+            if notice.status == "UNREAD":
+                unread_notice.append(notice)
+        return unread_notice
+
+    def read_notice(self, notice_id: str):
+        for notice in self.__notice_list:
+            if notice.id == notice_id:
+                notice.status = "READ"
+                return notice
+        return None
 
 class Bronze(Customer):
     def __init__(self, id: str, name: str):
@@ -1076,6 +1100,59 @@ def enroll_customer(req: RequestEnrollCustomer):
             member_type=req.member_type,
             message="Registration failed. Please check your data or contact admin."
         )
+
+class RequestCheckNotice(BaseModel):
+    customer_id: str
+
+class ResponseNotice(BaseModel):
+    notice_id: str
+    date: str
+    message: str
+    status: str
+
+@app.post("/checkNotice", response_model=list[ResponseNotice])
+def check_notice(req: RequestCheckNotice):
+    customer = spa.search_customer_by_id(req.customer_id)
+    if not customer: raise HTTPException(status_code=404, detail="Customer not found")
+
+    unread_notice = customer.check_notice()
+
+    notice_list = []
+    for notice in unread_notice:
+        temp = ResponseNotice(
+            notice_id=notice.id,
+            date=str(notice.date),
+            message=notice.text,
+            status=notice.status
+        )
+        notice_list.append(temp)
+    return notice_list
+
+class RequestReadNotice(BaseModel):
+    customer_id: str
+    notice_id: str
+
+@app.post("/readNotice", response_model=ResponseNotice)
+def read_notice(req: RequestReadNotice):
+    customer = spa.search_customer_by_id(req.customer_id)
+    if not customer: raise HTTPException(status_code=404, detail="Customer not found")
+
+    notice = customer.read_notice(req.notice_id)
+
+    if notice is None:
+        raise  HTTPException(
+            status_code=404, 
+            detail=f"notice_id: {req.notice_id} not found!"
+        )
+
+    temp = ResponseNotice(
+        notice_id=notice.id,
+        date=str(notice.date),
+        message=notice.text,
+        status=notice.status
+    )
+
+    return temp
 
 treatment_dict = {
   "Traditional Thai Massage" : ["TM-01", "TM-02", "TM-03"],
