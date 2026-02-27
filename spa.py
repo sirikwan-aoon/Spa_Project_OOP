@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, time
 from typing import Dict
 from enum import Enum
 from fastapi import FastAPI, HTTPException
@@ -282,6 +282,19 @@ class RegistrationOfficer(Admin):
         self.add_customer(customer)
 
         return customer
+    
+class Coupon:
+    def __init__(self, id: str, discount: float):
+        self.__id = id
+        self.__discount = discount
+
+    @property
+    def id(self):
+        return self.__id
+
+    @property
+    def discount(self):
+        return self.__discount
 
 class Message:
     def __init__(self, id: str, receiver, text: str, date_received: datetime):
@@ -329,7 +342,6 @@ class Customer:
     def missed_count(self): return self.__missed_count
     @property
     def notice_list(self): return self.__notice_list
-    
     @property
     def wellness_record(self): return self.__wellness_record
     @property
@@ -405,7 +417,24 @@ class Customer:
                 notice.status = "READ"
                 return notice
         return None
+    
+    def change_personal_info(self, new_name:str):
+        if not isinstance (new_name, str) or not new_name.strip():
+            raise ValueError("New name must be a non-empty string")
+        old_name = self.__name
+        self.__name = new_name
+        return f"Name updated from {old_name} to {new_name}"
+    
+    def rating_employee(self, employee: Employee, score: int):
+        if not isinstance(employee, Employee):
+            raise TypeError("Must be spa's employee only")
+        
+        employee.add_rating(score)
 
+        avg_score = employee.get_average_rating()
+        
+        return f"Successfully rated {employee.name}! ({score} stars) | Current Average Rating: {avg_score:.2f} stars"
+    
 class Bronze(Customer):
     def __init__(self, id: str, name: str):
         super().__init__(id, name)
@@ -721,7 +750,23 @@ class Administrative(Admin):
                             "addon_count": addon_count
                         }
         return report_revenue
+    
+    def send_promotion(self, promo_text: str):
+        if not isinstance(promo_text, str) or not promo_text.strip():
+            raise ValueError("Promotion must be non-empty string")
+        
+        customer_list = self.spa.customer_list 
+        count = 0
+        now = datetime.now()
 
+        for customer in customer_list:
+            notice_id = f"PROMO-{now.strftime('%Y%m%d%H%M%S')}-{customer.id}"
+            promo_msg = Message(notice_id, customer, promo_text, now)
+            customer.add_notice_list(promo_msg)
+            count += 1
+            
+        return f"Promotion sent {count} person"
+    
 class Payment(ABC):
     @abstractmethod
     def pay_deposit(self, deposit: float, **kwargs): pass
@@ -866,10 +911,14 @@ class Therapist(Employee):
         if not isinstance(skill, SkillSets): raise TypeError("Skill must be a SkillSets object")
         self.__skill = skill
         self.__points = 0
-
+        self.__ratings = []
     @property
     def skill(self):
       return self.__skill
+    
+    @property
+    def ratings(self): 
+        return self.__ratings
 
     def create_wellness_record(self, text_record: str, customer: Customer):
         if not isinstance(customer, Customer): raise TypeError("customer must be a Customer object")
@@ -880,7 +929,17 @@ class Therapist(Employee):
     def show_wellness_record(self, customer: Customer):
         if not isinstance(customer, Customer): raise TypeError("customer must be a Customer object")
         return customer.wellness_record
+    
+    def add_rating(self, score: int):
+        if not isinstance(score, int) or not (1 <= score <= 5):
+            raise ValueError("Rating must be between 1-5")
+        self.__ratings.append(score)
 
+    def get_average_rating(self):
+        if not self.__ratings:
+            return 0.0
+        return sum(self.__ratings) / len(self.__ratings)
+    
 class Resource:
     def __init__(self, id: str, name: str, amount: int):
         if not isinstance(id, str) or not isinstance(name, str): raise TypeError("ID and name must be strings")
@@ -1163,7 +1222,7 @@ class ResponseTreatment(BaseModel):
 def request_to_view_treatment_list(req: RequestViewTreatmentList):
     customer = spa.search_customer_by_id(req.customer_id)
     if customer == None:
-        raise HTTPException(status_code=401, detail="Customer is not regitered")
+        raise HTTPException(status_code=401, detail="Customer is not registered")
     temp_treatment_list = []
     for treatment in spa.treatment_list:
         show_treatment = ResponseTreatment(
@@ -1736,6 +1795,76 @@ def request_room_schedule(req :RequestRoomSchedule):
   result = ResponseRoomSchedule(year=req.year,month=req.month,day=req.day,slot=sub_result)
   return result 
 
+
+class RequestChangeInfo(BaseModel):
+    customer_id: str
+    new_name: str
+
+@app.patch("/customer/update-info")
+def update_customer_info(req: RequestChangeInfo):
+    
+    customer = spa.search_customer_by_id(req.customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    try:
+        result_message = customer.change_personal_info(req.new_name)
+        return {"status": "SUCCESS", "message": result_message}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+class RequestSendPromotion(BaseModel):
+    admin_id: str
+    promo_text: str
+
+@app.post("/sendPromotion")
+def send_promotion(req: RequestSendPromotion):
+
+    admin = spa.search_employee_by_id(req.admin_id)
+
+    if not admin or not isinstance(admin, Administrative):
+        raise HTTPException(status_code=403, detail="Administrative not found")
+    
+    try:
+        result_message = admin.send_promotion(req.promo_text)
+        return {"status": "SUCCESS", "message": result_message}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+
+class RequestRateEmployee(BaseModel):
+    customer_id: str
+    employee_id: str
+    score: int
+
+@app.post("/rateEmployee")
+def rate_employee(req: RequestRateEmployee):
+    
+    customer = spa.search_customer_by_id(req.customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer id not found")
+
+    employee = spa.search_employee_by_id(req.employee_id)
+    if not employee:
+        raise HTTPException(status_code=404, detail="Therapist id not found")
+        
+    try:
+        message = customer.rating_employee(employee, req.score)
+        
+        return {
+            "status": "SUCCESS",
+            "message": message,
+            "data": {
+                "employee_id": employee.id,
+                "employee_name": employee.name,
+                "total_reviews": len(employee.ratings),
+                "average_rating": round(employee.get_average_rating(), 2)
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
 
 
 if __name__ == "__main__":
