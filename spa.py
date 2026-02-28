@@ -2,12 +2,15 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, time
 from typing import Dict
 from enum import Enum
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 import uvicorn
 from pydantic import BaseModel, Field
 from abc import ABC, abstractmethod
+import re
 
+from fastmcp import FastMCP
 
+mcp = FastMCP("Spa_system")
 app = FastAPI()
 
 # ==========================================
@@ -427,7 +430,7 @@ class Customer:
     
     def rating_employee(self, employee: Employee, score: int):
         if not isinstance(employee, Employee):
-            raise TypeError("Must be spa's employee only")
+            raise TypeError("employee must be Employee object")
         
         employee.add_rating(score)
 
@@ -760,7 +763,7 @@ class Administrative(Admin):
         now = datetime.now()
 
         for customer in customer_list:
-            notice_id = f"PROMO-{now.strftime('%Y%m%d%H%M%S')}-{customer.id}"
+            notice_id = f"PROMOTION-{now.strftime('%Y%m%d%H%M%S')}-{customer.id}"
             promo_msg = Message(notice_id, customer, promo_text, now)
             customer.add_notice_list(promo_msg)
             count += 1
@@ -1126,9 +1129,13 @@ class ResponseEnrollCustomer(BaseModel):
     customer_id: str
     member_type: str              
     message: str
-
+@mcp.tool(
+    name="enroll_customer",
+    description="Enroll a customer with name and member type (bronze, silver, gold, platinum)."
+)
 @app.post("/enrollCustomer", response_model=ResponseEnrollCustomer)
 def enroll_customer(req: RequestEnrollCustomer):
+
     try:
         officer = spa.search_employee_by_id("WEB0001")
         
@@ -1149,6 +1156,7 @@ def enroll_customer(req: RequestEnrollCustomer):
             message="Registration failed. Please check your data or contact admin."
         )
 
+
 class RequestCheckNotice(BaseModel):
     customer_id: str
 
@@ -1158,6 +1166,49 @@ class ResponseNotice(BaseModel):
     message: str
     status: str
 
+@app.post("/getCustomerNameById", response_model=str)
+@mcp.tool(
+    name="getCustomerNameById",
+    description=
+    """
+    Get a customer's name by their ID.
+
+    Parameters:
+    - customer_id: The unique ID of the customer.
+    """
+)
+def get_customer_name_from_id(customer_id: str):
+    customer = spa.search_customer_by_id(customer_id)
+    return customer.name
+
+
+
+@app.post("/getCustomerIdByName", response_model=str)
+@mcp.tool(
+    name="getCustomerIdByName",
+    description="""
+    Get a customer's ID by their name.
+
+    Parameters:
+    - name: name of the customer.
+    """
+)
+def get_customer_id_from_name(customer_name: str):
+    customer = spa.search_customer_by_name(customer_name)
+    return customer.id
+
+
+
+@mcp.tool(
+    name="checkNotice",
+    description=
+    """
+    Check message
+
+    Parameters:
+    - customer_id: The unique ID of the customer.
+    """
+)
 @app.post("/checkNotice", response_model=list[ResponseNotice])
 def check_notice(req: RequestCheckNotice):
     customer = spa.search_customer_by_id(req.customer_id)
@@ -1181,6 +1232,19 @@ class RequestReadNotice(BaseModel):
     notice_id: str
 
 @app.post("/readNotice", response_model=ResponseNotice)
+@mcp.tool(
+    name="readNotice",
+    description="""
+    Mark a specific notification as 'Read' and view its full content.
+
+    Parameters:
+    - customer_id: The unique ID of the customer (e.g., 'C0001').
+    - notice_id: The unique ID of the notification to be read.
+
+    IMPORTANT: Arguments must be passed as top-level fields. Do NOT wrap them in a 'req' object.
+    CRITICAL: Report errors as they are. DO NOT attempt to rewrite the code or logic if the notification is not found.
+    """
+)
 def read_notice(req: RequestReadNotice):
     customer = spa.search_customer_by_id(req.customer_id)
     if not customer: raise HTTPException(status_code=404, detail="Customer not found")
@@ -1202,12 +1266,8 @@ def read_notice(req: RequestReadNotice):
 
     return temp
 
-treatment_dict = {
-  "Traditional Thai Massage" : ["TM-01", "TM-02", "TM-03"],
-  "Aroma Therapy" : ["AT-02"],
-  "Deep Tissue Massage" : ["DT-03"],
-  "Hydrotherapy Pool" : ["HP-04"],
-}
+
+
 
 class RequestViewTreatmentList(BaseModel):
     customer_id: str
@@ -1218,7 +1278,18 @@ class ResponseTreatment(BaseModel):
     duration: int
     price: float
 
+
+
 @app.post("/requstViewTreatmentList", response_model=list[ResponseTreatment])
+@mcp.tool(name="ViewTreatmentList",
+          description=
+          """
+            View all treatment list
+
+            Parameters:
+            - customer_id: The unique ID of the customer.
+          """
+          )
 def request_to_view_treatment_list(req: RequestViewTreatmentList):
     customer = spa.search_customer_by_id(req.customer_id)
     if customer == None:
@@ -1244,6 +1315,16 @@ class ResponseTherapistFromSearch(BaseModel):
     skill: str
 
 @app.post("/requestViewTherapistByTreatment", response_model=list[ResponseTherapistFromSearch])
+@mcp.tool(name="ViewTherapistByTreatment",
+          description=
+          """
+            View therapist by treatment
+
+            Parameters:
+            - customer_id: The unique ID of the customer.
+            - treatment_id: The unique ID of the treatment.
+          """
+          )
 def request_view_therapist_by_treatment(req: RequestViewTherapistByTreatment):
     customer = spa.search_customer_by_id(req.customer_id)
     treatment = spa.search_treatment_by_id(req.treatment_id)
@@ -1263,6 +1344,11 @@ def request_view_therapist_by_treatment(req: RequestViewTherapistByTreatment):
                 temp_therapist_list.append(therapist)
     return temp_therapist_list
 
+
+
+
+
+
 class RequestGetSlot(BaseModel):
     customer_id: str = Field(..., min_length=1)
     therapist_id: str = Field(..., min_length=1)
@@ -1281,14 +1367,23 @@ class ResponseGetSlot(BaseModel):
     day: int
     slot: list[ResponseSlot]
 
-time_dict = {
-  1: "8:00-8:30", 2: "8:30-9:00", 3: "9:00-9:30", 4: "9:30-10:00",
-  5: "10:00-10:30", 6: "10:30-11:00", 7: "11:00-11:30", 8: "11:30-12:00",
-  9: "12:00-12:30", 10: "12:30-13:00", 11: "13:00-13:30", 12: "13:30-14:00",
-  13: "14:00-14:30", 14: "14:30-15:00", 15: "15:00-15:30", 16: "15:30-16:00",
-}
-
 @app.post("/getSlot", response_model=list[ResponseGetSlot])
+@mcp.tool(name="checkAvailableSlot",
+          description=
+          """
+            View Available slot 
+
+            Parameters:
+            - customer_id: The unique ID of the customer.
+            - therapist_id: The unique ID of the therapst.
+            - treatment_id: The unique ID of the treatment.
+            - room_type : PV for privateRoom,SH for shareRoom 
+            - year:year that you want to use service
+            - month:month that you want to use service
+            - day:day that you want to use service
+
+          """
+          )
 def find_free_slot(req: RequestGetSlot):
     try:
         date_class = date(req.year, req.month, req.day)
@@ -1326,16 +1421,34 @@ def find_free_slot(req: RequestGetSlot):
                 ResponseGetSlot(
                     room_id=room.id, year=free_slots[0].date.year,
                     month=free_slots[0].date.month, day=free_slots[0].date.day,
-                    slot=[ResponseSlot(time=time[slot.slot_order]) for slot in free_slots]
+                    slot=[ResponseSlot(time=time_dict[slot.slot_order]) for slot in free_slots]
                 )
             )
     return result
+
+
+
+
 
 class RequestCancleBooking(BaseModel):
     booking_id: str = Field(..., min_length=1)
     customer_id: str = Field(..., min_length=1)
   
 @app.post("/cancelBooking", response_model=str)
+@mcp.tool(
+    name="cancelBooking",
+    description="""
+    Cancel an existing spa booking.
+
+    Parameters:
+    - customer_id: The unique ID of the customer who owns the booking (e.g., 'C0001').
+    - booking_id: The unique ID of the booking to be canceled (e.g., 'BK-20260110-0').
+
+    IMPORTANT: Arguments must be passed as top-level fields. Do NOT wrap them in a 'req' object.
+    CRITICAL: If the booking cannot be found or cannot be canceled, report the error message exactly. 
+    DO NOT attempt to modify the source code or suggest backend changes.
+    """
+)
 def cancel_booking(req: RequestCancleBooking):
     customer = spa.search_customer_by_id(req.customer_id)
     if not customer: raise HTTPException(status_code=404, detail="Customer not found")
@@ -1345,6 +1458,11 @@ def cancel_booking(req: RequestCancleBooking):
 
     result = booking.cancle()
     return result
+
+
+
+
+
 
 class RequestTreatment(BaseModel):
     therapist_id: str = Field(..., min_length=1)
@@ -1373,46 +1491,31 @@ class ResponseRequestBooking(BaseModel):
     booking_id: str
     detail:list[ResponseTreatmentError]
 
-def change_str_to_index_list(str_time):
-    result = []
-    found_start_time = False
-    try:
-        start_time, end_time = str_time.split("-")
-    except ValueError:
-        return [] 
-    for key, value in time_dict.items():
-        start, end = value.split("-")
-        if start_time == start:
-            result.append(key)
-            found_start_time = True
-            if end_time == end: return result
-            continue
-        if found_start_time:
-            result.append(key)
-        if end_time == end: return result
-    return result
-
-def is_continuous(numbers):
-    if not numbers:
-        return False
-
-    numbers = sorted(numbers)
-
-    for i in range(len(numbers) - 1):
-        if numbers[i + 1] - numbers[i] != 1:
-            return False
-
-    return True
-
 
 @app.post("/requestBooking", response_model=ResponseRequestBooking)
+@mcp.tool(
+    name="requestBooking",
+    description="""
+    Create a spa treatment booking.
+    
+    Parameters:
+    - customer_id: The unique ID of the customer (e.g., C0001).
+    - year: The year of the appointment (e.g., 2026).
+    - month: The month of the appointment (1-12).
+    - day: The day of the appointment (1-31).
+    - treatments: A list of treatment objects. Each object must include therapist_id, treatment_id, room_id, time (format 'HH:MM-HH:MM'), and addon (list of addon IDs).
+
+    IMPORTANT: Arguments must be passed as top-level fields. Do not wrap in a 'req' object.
+    CRITICAL: If an error occurs, report it exactly. DO NOT attempt to modify or suggest changes to the source code.
+    """
+)
 def request_booking(req: RequestBooking):
     treatment_error_list = []
     treatment_transaction_list  = []
     customer = spa.search_customer_by_id(req.customer_id)
     d = date(req.year,req.month,req.day)
     if customer is None:
-          return ErrorMessage(error_code="CUSTOMER_NOT_FOUND",error_message=f"{req.customer_id} is not exist")
+        raise HTTPException(status_code=403, detail="Customer is not found")
 
     for treat in req.treatments:
       error_list = []
@@ -1520,12 +1623,20 @@ class ResponseBooking(BaseModel):
 
 ResponseBooking.model_rebuild()
 
-def make_time_index_to_str(slot_list):
-    time_start = time[slot_list[0]].split("-")[0]
-    time_end = time[slot_list[-1]].split("-")[-1]
-    return (time_start, time_end)
 
 @app.post("/requestToCheckActiveBooking",response_model=list[ResponseBooking])
+@mcp.tool(
+    name="checkActiveBooking",
+    description="""
+    View all active (current or upcoming) bookings for a specific customer.
+
+    Parameters:
+    - customer_id: The unique ID of the customer (e.g., 'C0001').
+
+    IMPORTANT: Arguments must be passed as top-level fields. Do NOT wrap in a 'req' object.
+    CRITICAL: Report the list of bookings exactly as they appear. Do not suggest code changes if no bookings are found.
+    """
+)
 def request_to_check_active_booking(req: RequestCheckBooking):
     customer = spa.search_customer_by_id(req.customer_id)
     if customer is None:
@@ -1555,6 +1666,19 @@ def request_to_check_active_booking(req: RequestCheckBooking):
     return temp_booking_list
 
 @app.post("/requestToCheckBookingHistory",response_model=list[ResponseBooking])
+@mcp.tool(
+    name="checkBookingHistory",
+    description="""
+    View all completed or past booking history for a specific customer.
+
+    Parameters:
+    - customer_id: The unique ID of the customer (e.g., 'C0001').
+
+    IMPORTANT: Arguments must be passed as top-level fields. Do NOT wrap them in a 'req' object.
+    CRITICAL: Report the history exactly as stored. If no history exists, state it clearly. 
+    DO NOT suggest modifying any past records or system code.
+    """
+)
 def request_to_check_booking_history(req: RequestCheckBooking):
     customer = spa.search_customer_by_id(req.customer_id)
     if customer is None:
@@ -1588,6 +1712,17 @@ class RequestToCheckIn(BaseModel):
     booking_id: str
 
 @app.post("/requestToCheckIn",response_model=str)
+@mcp.tool(
+    name="checkIn",
+    description="""
+    Check-in a customer for their specific booking.
+    Parameters:
+    - customer_id: The unique ID of the customer.
+    - booking_id: The unique ID of the booking to check-in.
+    IMPORTANT: Pass arguments as top-level fields. No 'req' object.
+    CRITICAL: Report success/fail as is. DO NOT modify backend code.
+    """
+)
 def request_to_check_in(req: RequestToCheckIn):
     customer = spa.search_customer_by_id(req.customer_id)
     if customer is None:
@@ -1601,6 +1736,17 @@ class RequestCreateWellnessRecord(BaseModel):
     text_record: str
 
 @app.post("/requestToCreateWellnessRecord",response_model=str)
+@mcp.tool(
+    name="createWellnessRecord",
+    description="""
+    Create a wellness record for a customer (Therapist only).
+    Parameters:
+    - therapist_id: The ID of the therapist creating the record.
+    - customer_id: The ID of the customer receiving the record.
+    - text_record: The content of the wellness record.
+    IMPORTANT: Pass arguments as top-level fields. No 'req' object.
+    """
+)
 def request_to_create_wellness_record(req: RequestCreateWellnessRecord):
     therapist = spa.search_employee_by_id(req.therapist_id)
     if therapist is None:
@@ -1620,6 +1766,16 @@ class ResponseShowWellnessRecord(BaseModel):
     wellness_record: str
 
 @app.post("/requestToShowWellnessRecord",response_model=list[ResponseShowWellnessRecord])
+@mcp.tool(
+    name="showWellnessRecord",
+    description="""
+    View wellness records for a customer (Therapist only).
+    Parameters:
+    - therapist_id: The ID of the therapist requesting to view.
+    - customer_id: The ID of the customer whose records are being viewed.
+    IMPORTANT: Pass arguments as top-level fields.
+    """
+)
 def request_to_create_wellness_record(req: RequestShowWellnessRecord):
     therapist = spa.search_employee_by_id(req.therapist_id)
     if therapist is None:
@@ -1646,6 +1802,19 @@ class RequestToPay(BaseModel):
   coupon_id: str
 
 @app.post("/requestToPayExpenses",response_model=str)
+@mcp.tool(
+    name="payExpenses",
+    description="""
+    Pay the final balance for a booking after service is completed.
+    Parameters:
+    - customer_id: The unique ID of the customer.
+    - booking_id: The unique ID of the booking.
+    - payment_type: 'Cash' or 'Card'.
+    - payment_value: Amount (for Cash) or Card Number (for Card).
+    - coupon_id: Coupon ID or 'None'.
+    IMPORTANT: Pass arguments as top-level fields.
+    """
+)
 def request_to_pay_expenses(req :RequestToPay):
     customer = spa.search_customer_by_id(req.customer_id)
     if not customer:
@@ -1668,6 +1837,23 @@ def request_to_pay_expenses(req :RequestToPay):
     else: raise HTTPException(status_code=400, detail="Invalid payment type")      
 
 @app.post("/requestToPayDeposit",response_model=str)
+@mcp.tool(
+    name="requestToPayDeposit",
+    description="""
+    Process a deposit payment for a specific spa booking.
+
+    Parameters:
+    - customer_id: The unique ID of the customer (e.g., 'C0001').
+    - booking_id: The unique ID of the booking to be paid (e.g., 'BK-20260110-0').
+    - payment_type: The method of payment. Strictly use 'Cash' or 'Card'.
+    - payment_value: The payment amount for Cash (integer) or the Card Number for Card (integer).
+    - coupon_id: The ID of the coupon to be used. Send "None" if no coupon is applied.
+
+    IMPORTANT: Arguments must be passed as top-level fields. Do NOT wrap them in a 'req' object.
+    CRITICAL: If the payment fails or the booking is not found, report the error message exactly as received. 
+    DO NOT attempt to modify the source code, fix the logic, or suggest backend changes.
+    """
+)
 def request_to_pay_deposit(req :RequestToPay):
     customer = spa.search_customer_by_id(req.customer_id)
     if not customer:
@@ -1679,10 +1865,10 @@ def request_to_pay_deposit(req :RequestToPay):
 
     total = 1000 #ค่ามัดจำ
     
-    if req.payment_type == "Cash":
+    if req.payment_type.lower() == "cash":
         cash = Cash()
         return booking.pay_deposit(cash, total, money=req.payment_value)
-    elif req.payment_type == "Card":
+    elif req.payment_type.lower() == "card":
         card = Card()
         return booking.pay_deposit(card, total, number=str(req.payment_value))
     else: raise HTTPException(status_code=400, detail="Invalid payment type")   
@@ -1708,6 +1894,18 @@ class ResponseReportPerDay(BaseModel):
   treatment_list_count: dict[str, int]
 
 @app.post("/requestToCalculateRevenuePerDay",response_model=ResponseReportPerDay)
+@mcp.tool(
+    name="calculateRevenuePerDay",
+    description="""
+    Calculate daily revenue and usage report (Admin only).
+    Parameters:
+    - admin_id: The ID of the admin.
+    - year: Year (integer).
+    - month: Month (1-12).
+    - day: Day (1-31).
+    IMPORTANT: Pass arguments as top-level fields.
+    """
+)
 def request_to_calculate_revenue_per_day(req :RequestToCalculateRevenuePerDay):
   # PART 1 -> GET DATE(WORK ACCORDING TO SEQUENCE)
   date_to_cal = date(req.year, req.month, req.day)
@@ -1742,6 +1940,21 @@ class Request_employee_schedule(BaseModel):
   month:int
   day:int
 @app.post("/requestEmployeeSchedule",response_model=ResponseEmployeeSchedule)
+@mcp.tool(
+    name="requestEmployeeSchedule",
+    description="""
+    View the working schedule and bookings for a specific employee on a given date.
+
+    Parameters:
+    - employee_id: The unique ID of the employee (e.g., 'TH0001').
+    - year: The year of the schedule (e.g., 2026).
+    - month: The month (1-12).
+    - day: The day (1-31).
+
+    IMPORTANT: Arguments must be passed as top-level fields. Do NOT wrap in a 'req' object.
+    CRITICAL: Report the schedule exactly as shown. If the employee is free, mention it as 'Available'.
+    """
+)
 def request_employee_schedule(req :Request_employee_schedule):
   # PART 1 -> GET DATE(WORK ACCORDING TO SEQUENCE)
   employee = spa.search_employee_by_id(req.employee_id)
@@ -1752,9 +1965,9 @@ def request_employee_schedule(req :Request_employee_schedule):
   sub_result = []
   for slot in slot_day:
    if slot.vacancy == 1:
-    sub_result.append(ResponseEmployeeSlot(time=time[slot.slot_order],room_id="",treatment_id="",customer_id=""))
+    sub_result.append(ResponseEmployeeSlot(time=time_dict[slot.slot_order],room_id="",treatment_id="",customer_id=""))
    else:
-    sub_result.append(ResponseEmployeeSlot(time=time[slot.slot_order],room_id=slot.treatment_transaction[0].room.id,treatment_id=slot.treatment_transaction[0].treatment.id,customer_id=slot.treatment_transaction[0].customer.id))
+    sub_result.append(ResponseEmployeeSlot(time=time_dict[slot.slot_order],room_id=slot.treatment_transaction[0].room.id,treatment_id=slot.treatment_transaction[0].treatment.id,customer_id=slot.treatment_transaction[0].customer.id))
   result = ResponseEmployeeSchedule(year=req.year,month=req.month,day=req.day,slot=sub_result)
   return result 
 
@@ -1779,6 +1992,20 @@ class RequestRoomSchedule(BaseModel):
   month:int
   day:int
 @app.post("/requestRoomSchedule",response_model=ResponseRoomSchedule)
+@mcp.tool(
+    name="requestRoomSchedule",
+    description="""
+    View the usage schedule and appointments for a specific spa room on a given date.
+
+    Parameters:
+    - room_id: The unique ID of the room (e.g., 'ROOM-DRY-PV-01').
+    - year: The year (e.g., 2026).
+    - month: The month (1-12).
+    - day: The day (1-31).
+
+    IMPORTANT: Arguments must be passed as top-level fields. Do NOT wrap in a 'req' object.
+    """
+)
 def request_room_schedule(req :RequestRoomSchedule):
   # PART 1 -> GET DATE(WORK ACCORDING TO SEQUENCE)
   room = spa.search_room_by_id(req.room_id)
@@ -1791,7 +2018,7 @@ def request_room_schedule(req :RequestRoomSchedule):
    sub_sub_result = []
    for treatment in slot.treatment_transaction:
        sub_sub_result.append(ResponseRoomDetail(customer_id=treatment.customer.id,treatment_id=treatment.treatment.id,employee_id=treatment.therapist.id))
-   sub_result.append(ResponseRoomSlot(time=time[slot.slot_order],detail=sub_sub_result))
+   sub_result.append(ResponseRoomSlot(time=time_dict[slot.slot_order],detail=sub_sub_result))
   result = ResponseRoomSchedule(year=req.year,month=req.month,day=req.day,slot=sub_result)
   return result 
 
@@ -1801,6 +2028,16 @@ class RequestChangeInfo(BaseModel):
     new_name: str
 
 @app.patch("/customer/update-info")
+@mcp.tool(
+    name="updateCustomerInfo",
+    description="""
+    Update customer's personal information (e.g., name).
+    Parameters:
+    - customer_id: The ID of the customer.
+    - new_name: The new name to update.
+    IMPORTANT: Pass arguments as top-level fields.
+    """
+)
 def update_customer_info(req: RequestChangeInfo):
     
     customer = spa.search_customer_by_id(req.customer_id)
@@ -1819,6 +2056,16 @@ class RequestSendPromotion(BaseModel):
     promo_text: str
 
 @app.post("/sendPromotion")
+@mcp.tool(
+    name="sendPromotion",
+    description="""
+    Send a promotion message to all customers (Admin only).
+    Parameters:
+    - admin_id: The ID of the administrative officer.
+    - promo_text: The promotion message text.
+    IMPORTANT: Pass arguments as top-level fields.
+    """
+)
 def send_promotion(req: RequestSendPromotion):
 
     admin = spa.search_employee_by_id(req.admin_id)
@@ -1839,6 +2086,17 @@ class RequestRateEmployee(BaseModel):
     score: int
 
 @app.post("/rateEmployee")
+@mcp.tool(
+    name="rateEmployee",
+    description="""
+    Rate a therapist or employee service score.
+    Parameters:
+    - customer_id: The ID of the customer providing the rating.
+    - employee_id: The ID of the employee being rated.
+    - score: Rating score (integer).
+    IMPORTANT: Pass arguments as top-level fields.
+    """
+)
 def rate_employee(req: RequestRateEmployee):
     
     customer = spa.search_customer_by_id(req.customer_id)
@@ -1865,7 +2123,6 @@ def rate_employee(req: RequestRateEmployee):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
     
-
-
 if __name__ == "__main__":
-    uvicorn.run("spa:app", host="127.0.0.1", port=8000, log_level="info")
+    # uvicorn.run("spa:app", host="127.0.0.1", port=8000, log_level="info")
+    mcp.run()
