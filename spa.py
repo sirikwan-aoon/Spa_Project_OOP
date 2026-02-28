@@ -1278,8 +1278,6 @@ class ResponseTreatment(BaseModel):
     duration: int
     price: float
 
-
-
 @app.post("/requstViewTreatmentList", response_model=list[ResponseTreatment])
 @mcp.tool(name="ViewTreatmentList",
           description=
@@ -1776,7 +1774,7 @@ class ResponseShowWellnessRecord(BaseModel):
     IMPORTANT: Pass arguments as top-level fields.
     """
 )
-def request_to_create_wellness_record(req: RequestShowWellnessRecord):
+def request_to_show_wellness_record(req: RequestShowWellnessRecord):
     therapist = spa.search_employee_by_id(req.therapist_id)
     if therapist is None:
         raise HTTPException(status_code=403, detail="Therapist not found")
