@@ -1,0 +1,166 @@
+*** หมายเหตุ: อาจต้องมีการเปลี่ยนรหัสการจองตามสถานการณ์
+
+<< enroll_customer >>
+{
+  "customer_name": "Somchai Jaidee",
+  "member_type": "gold"
+}
+
+<< get_customer_name_from_id >>
+C0001
+
+<< get_customer_id_from_name >>
+Somchai Jaidee
+
+<< check_notice >>
+{
+  "customer_id": "C0001"
+}
+
+<< read_notice >> //อาจต้องมีการเปลี่ยน notice_id ตาที่โชว์จากฟังก์ชัน check_notice
+{
+  "customer_id": "C0001",
+  "notice_id": "NTC-20260228-001"
+}
+
+<< request_to_view_treatment_list >>
+{
+  "customer_id": "C0001"
+}
+
+<< request_view_therapist_by_treatmen >>
+{
+  "customer_id": "C0001",
+  "treatment_id": "TM-01"
+}
+
+<< find_free_slot >>
+{
+  "customer_id": "C0001",
+  "therapist_id": "T001",
+  "treatment_id": "TM-01",
+  "room_type": "PV",
+  "year": 2026,
+  "month": 1,
+  "day": 15
+}
+
+<< cancel_booking >>
+{
+  "customer_id": "C0001",
+  "booking_id": "BK-20260228-0"
+}
+
+<< request_booking >>
+{
+  "customer_id": "C0001",
+  "year": 2026,
+  "month": 1,
+  "day": 15,
+  "treatments": [
+    {
+      "therapist_id": "T001",
+      "treatment_id": "TM-01",
+      "room_id": "ROOM-DRY-PV1",
+      "time": "10:00-11:00",
+      "addon": ["OIL-01"]
+    },
+    {
+      "therapist_id": "T002",
+      "treatment_id": "AT-01",
+      "room_id": "ROOM-WET-PV1",
+      "time": "13:00-14:30",
+      "addon": []
+    }
+  ]
+}
+
+<< request_to_check_active_booking >>
+{
+  "customer_id": "C0001"
+}
+
+<< request_to_check_booking_history >>
+{
+  "customer_id": "C0001"
+}
+
+<< request_to_check_in >>
+{
+  "customer_id": "C0001",
+  "booking_id": "BK-20260315-001"
+}
+
+<< request_to_create_wellness_record >>
+{
+  "therapist_id": "T001",
+  "customer_id": "C0001",
+  "text_record": "ลูกค้ามีอาการตึงบริเวณบ่าและไหล่ขวาค่อนข้างมาก ได้ทำการนวดรีดเส้นคลายกล้ามเนื้อให้แล้ว แนะนำให้ลูกค้ายืดเหยียดร่างกายระหว่างทำงานเป็นประจำ"
+}
+
+<< request_to_show_wellness_record >>
+{
+  "therapist_id": "T001",
+  "customer_id": "C0001"
+}
+
+<< request_to_pay_expens >>
+{
+  "customer_id": "C0001",
+  "booking_id": "BK-20260315-001",
+  "payment_type": "Card",
+  "payment_value": "1234567890123456",
+  "coupon_id": "None" 
+}
+
+<< request_to_pay_deposit >>
+{
+  "customer_id": "C0001",
+  "booking_id": "BK-20260315-001",
+  "payment_type": "Card",
+  "payment_value": "1234567890123456",
+  "coupon_id": "None" 
+}
+
+<< request_to_calculate_revenue_per_day >>
+{
+  "admin_id": "0002",
+  "year": 2026,
+  "month": 2,
+  "day": 28
+}
+
+<< request_employee_schedule >>
+{
+  "employee_id": "T001",
+  "year": 2026,
+  "month": 1,
+  "day": 15
+}
+
+<< request_room_schedule >>
+{
+  "room_id": "ROOM-WET-PV-001",
+  "year": 2026,
+  "month": 1,
+  "day": 15
+}
+
+<< update_customer_info >>
+{
+  "customer_id": "C0001",
+  "new_name": "Nong hmoo hun"
+}
+
+<<  send_promotion >>
+{
+  "admin_id": "A001",
+  "promo_text": "🔥 โปรโมชันพิเศษ! รับส่วนลด 20% ทุกคอร์สสปาตลอดเดือนมีนาคมนี้ เพียงแจ้งโค้ด MARCH20 ตอนชำระเงิน"
+}
+
+<< rate_employee >>
+{
+  "customer_id": "C0001",
+  "employee_id": "T001",
+  "score": 5
+}
