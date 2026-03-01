@@ -1120,6 +1120,56 @@ spa = init_system()
 # 3. API ROUTES & PYDANTIC VALIDATION (OUTER LAYER)
 # ==========================================
 
+time_dict = {
+  1: "8:00-8:30", 2: "8:30-9:00", 3: "9:00-9:30", 4: "9:30-10:00",
+  5: "10:00-10:30", 6: "10:30-11:00", 7: "11:00-11:30", 8: "11:30-12:00",
+  9: "12:00-12:30", 10: "12:30-13:00", 11: "13:00-13:30", 12: "13:30-14:00",
+  13: "14:00-14:30", 14: "14:30-15:00", 15: "15:00-15:30", 16: "15:30-16:00",
+}
+
+treatment_dict = {
+  "Traditional Thai Massage" : ["TM-01", "TM-02", "TM-03"],
+  "Aroma Therapy" : ["AT-02"],
+  "Deep Tissue Massage" : ["DT-03"],
+  "Hydrotherapy Pool" : ["HP-04"],
+}
+
+def make_time_index_to_str(slot_list):
+    time_start = time_dict[slot_list[0]].split("-")[0]
+    time_end = time_dict[slot_list[-1]].split("-")[-1]
+    return (time_start, time_end)
+
+def change_str_to_index_list(str_time):
+    result = []
+    found_start_time = False
+    try:
+        start_time, end_time = str_time.split("-")
+    except ValueError:
+        return [] 
+    for key, value in time_dict.items():
+        start, end = value.split("-")
+        if start_time == start:
+            result.append(key)
+            found_start_time = True
+            if end_time == end: return result
+            continue
+        if found_start_time:
+            result.append(key)
+        if end_time == end: return result
+    return result
+
+def is_continuous(numbers):
+    if not numbers:
+        return False
+
+    numbers = sorted(numbers)
+
+    for i in range(len(numbers) - 1):
+        if numbers[i + 1] - numbers[i] != 1:
+            return False
+
+    return True
+
 class RequestEnrollCustomer(BaseModel):
     customer_name: str
     member_type: str
@@ -2122,5 +2172,5 @@ def rate_employee(req: RequestRateEmployee):
         raise HTTPException(status_code=400, detail=str(e))
     
 if __name__ == "__main__":
-    # uvicorn.run("spa:app", host="127.0.0.1", port=8000, log_level="info")
-    mcp.run()
+    uvicorn.run("spa:app", host="127.0.0.1", port=8000, log_level="info")
+    # mcp.run()
