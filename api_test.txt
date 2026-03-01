@@ -20,7 +20,7 @@ Somchai Jaidee
 << read_notice >> //อาจต้องมีการเปลี่ยน notice_id ตาที่โชว์จากฟังก์ชัน check_notice
 {
   "customer_id": "C0001",
-  "notice_id": "NTC-20260228-001"
+  "notice_id": "ENROLL_RESULT-20260301112953"
 }
 
 << request_to_view_treatment_list >>
@@ -37,7 +37,7 @@ Somchai Jaidee
 << find_free_slot >>
 {
   "customer_id": "C0001",
-  "therapist_id": "T001",
+  "therapist_id": "T0001",
   "treatment_id": "TM-01",
   "room_type": "PV",
   "year": 2026,
@@ -59,16 +59,16 @@ Somchai Jaidee
   "day": 15,
   "treatments": [
     {
-      "therapist_id": "T001",
+      "therapist_id": "T0001",
       "treatment_id": "TM-01",
-      "room_id": "ROOM-DRY-PV1",
+      "room_id": "ROOM-DRY-PV-001",
       "time": "10:00-11:00",
-      "addon": ["OIL-01"]
+      "addon": ["OIL-P"]
     },
     {
-      "therapist_id": "T002",
-      "treatment_id": "AT-01",
-      "room_id": "ROOM-WET-PV1",
+      "therapist_id": "T0002",
+      "treatment_id": "AT-02",
+      "room_id": "ROOM-WET-PV-001",
       "time": "13:00-14:30",
       "addon": []
     }
@@ -107,7 +107,7 @@ Somchai Jaidee
 << request_to_pay_expens >>
 {
   "customer_id": "C0001",
-  "booking_id": "BK-20260315-001",
+  "booking_id": "BK-20260115-0",
   "payment_type": "Card",
   "payment_value": "1234567890123456",
   "coupon_id": "None" 
@@ -116,7 +116,7 @@ Somchai Jaidee
 << request_to_pay_deposit >>
 {
   "customer_id": "C0001",
-  "booking_id": "BK-20260315-001",
+  "booking_id": "BK-20260115-0",
   "payment_type": "Card",
   "payment_value": "1234567890123456",
   "coupon_id": "None" 
@@ -126,13 +126,13 @@ Somchai Jaidee
 {
   "admin_id": "0002",
   "year": 2026,
-  "month": 2,
-  "day": 28
+  "month": 1,
+  "day": 15
 }
 
 << request_employee_schedule >>
 {
-  "employee_id": "T001",
+  "employee_id": "T0001",
   "year": 2026,
   "month": 1,
   "day": 15
@@ -154,13 +154,13 @@ Somchai Jaidee
 
 <<  send_promotion >>
 {
-  "admin_id": "A001",
+  "admin_id": "0002",
   "promo_text": "🔥 โปรโมชันพิเศษ! รับส่วนลด 20% ทุกคอร์สสปาตลอดเดือนมีนาคมนี้ เพียงแจ้งโค้ด MARCH20 ตอนชำระเงิน"
 }
 
 << rate_employee >>
 {
   "customer_id": "C0001",
-  "employee_id": "T001",
+  "employee_id": "T0001",
   "score": 5
 }
